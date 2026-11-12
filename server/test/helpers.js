@@ -8,9 +8,17 @@ export { db };
 
 const silentLogger = { info() {}, warn() {}, error() {} };
 
-/** Empties every table that tests write to. */
+/**
+ * Empties every table that tests write to. Plain deletes in dependency order: on
+ * near-empty tables they are far quicker than TRUNCATE. Rows that hang off a
+ * listing or a user (photos, packages, sessions, codes) go with their parent.
+ */
 export async function resetDb() {
-  await db.$executeRaw`TRUNCATE TABLE users CASCADE`;
+  await db.$transaction([
+    db.$executeRaw`DELETE FROM listing_status_events`,
+    db.$executeRaw`DELETE FROM listings`,
+    db.$executeRaw`DELETE FROM users`,
+  ]);
 }
 
 /**

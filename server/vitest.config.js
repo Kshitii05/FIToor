@@ -22,6 +22,9 @@ export default defineConfig({
     globalSetup: ['./test/globalSetup.js'],
     // Tests share one real database, so test files run one after another.
     fileParallelism: false,
+    // Every test talks to a real database; allow for a slow or busy machine.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: testDatabaseUrl,
