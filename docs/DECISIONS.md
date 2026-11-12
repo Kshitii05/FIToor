@@ -45,6 +45,12 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I23 | Email delivery | Sent through Nodemailer when `SMTP_*` is configured. No provider is chosen; in development emails are printed to the server console behind an `EmailSender` interface. | PROVISIONAL |
 | I24 | Recovering a deleted account | During the 30 days, login is refused with a message saying until when the account can be recovered; submitting the email and password to the recovery endpoint reactivates it. The email and phone stay reserved until the account is erased. | PROVISIONAL |
 | I25 | OTP resend count | "5 resends per hour" (I2) means the initial send plus 5 resends in any rolling hour, counted separately per channel and purpose. | PROVISIONAL |
+| I26 | Listing title | Every listing has a required title of 5–80 characters, in addition to the details the spec lists. | PROVISIONAL |
+| I27 | Listing photos | 1 to 8 photos; JPEG, PNG or WebP, judged by file contents; 5 MB maximum each. A listing always keeps at least one photo. | PROVISIONAL |
+| I28 | Image storage without Cloudinary keys | In development, uploads are kept in `server/uploads` and served by the API. In production uploads are refused until the `CLOUDINARY_*` values are set. | PROVISIONAL |
+| I29 | Listing amount limits | Price, rental package price and deposit: ₹1 to ₹5,00,000. Delivery charge: ₹0 to ₹5,000. Late fee per day: ₹0 to ₹10,000. The deposit must be above zero. Sale quantity: 1 to 99, default 1. | PROVISIONAL |
+| I30 | Rental packages | 1 to 6 packages per listing, each 1–30 days, no duplicate durations. The 1/3/7-day presets are suggestions, not requirements. | PROVISIONAL |
+| I31 | Fulfilment, editing and deleting | A listing offers delivery, pickup or both; delivery needs a charge and a radius of 1–50 km. The mode (sale or rent) cannot change after creation. Delete is a soft delete. A removed listing cannot be edited; one under review can. Only fully verified users can create listings (I18). | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -65,5 +71,6 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-13 — Added I26–I31 while building listings and inventory (Module 2).
 - 2026-11-12 — Added I18–I25 while building accounts and profiles (Module 1).
 - 2026-11-12 — Rewritten against the final specification. Former open questions are now SPEC sections 12–15; this file keeps only implementation-level defaults.
