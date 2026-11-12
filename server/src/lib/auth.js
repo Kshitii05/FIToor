@@ -58,7 +58,7 @@ export function createRequireAuth({ db, clock }) {
         userId: true,
         revokedAt: true,
         expiresAt: true,
-        user: { select: { status: true } },
+        user: { select: { status: true, emailVerifiedAt: true, phoneVerifiedAt: true } },
       },
     });
 
@@ -70,9 +70,38 @@ export function createRequireAuth({ db, clock }) {
       session.user.status === 'ACTIVE';
     if (!live) throw AppError.unauthorized('Session expired or invalid');
 
-    req.auth = claims;
+    req.auth = {
+      ...claims,
+      verified: session.user.emailVerifiedAt !== null && session.user.phoneVerifiedAt !== null,
+    };
     next();
   };
+}
+
+/**
+ * For public routes that show more to a signed-in user. No Authorization header
+ * means an anonymous visitor; a header that is present must be valid.
+ */
+export function createOptionalAuth(requireAuth) {
+  return function optionalAuth(req, res, next) {
+    if (!req.get('authorization')) return next();
+    return requireAuth(req, res, next);
+  };
+}
+
+/**
+ * Use after requireAuth. Listing, buying and renting need both the email and the
+ * phone number verified (DECISIONS I18).
+ */
+export function requireVerified(req, _res, next) {
+  if (!req.auth?.verified) {
+    throw new AppError(
+      403,
+      'VERIFICATION_REQUIRED',
+      'Verify your email and phone number to do this',
+    );
+  }
+  next();
 }
 
 /**
