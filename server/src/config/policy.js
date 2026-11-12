@@ -58,3 +58,37 @@ export const RATE_LIMITS = Object.freeze({
   passwordReset: Object.freeze({ windowMinutes: 60, max: 5 }),
   otp: Object.freeze({ windowMinutes: 15, max: 30 }),
 });
+
+// Listings (SPEC Module 2; limits are DECISIONS I26 to I31, PROVISIONAL)
+export const LISTING_TITLE_MIN_LENGTH = 5;
+export const LISTING_TITLE_MAX_LENGTH = 80;
+export const LISTING_DESCRIPTION_MIN_LENGTH = 10;
+export const LISTING_DESCRIPTION_MAX_LENGTH = 2000;
+export const LISTING_BRAND_MAX_LENGTH = 60;
+export const LISTING_SIZE_MAX_LENGTH = 20;
+export const LISTING_COLOUR_MAX_LENGTH = 30;
+export const LISTING_QUANTITY_MAX = 99;
+
+// Listing photos
+export const LISTING_IMAGES_MIN = 1;
+export const LISTING_IMAGES_MAX = 8; // SPEC Module 2
+export const LISTING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+// Amounts, in paise
+export const LISTING_AMOUNT_MIN_PAISE = 1_00; // price, package price and deposit
+export const LISTING_AMOUNT_MAX_PAISE = 5_00_000_00;
+export const DELIVERY_CHARGE_MAX_PAISE = 5_000_00;
+export const LATE_FEE_PER_DAY_MAX_PAISE = 10_000_00;
+
+// Delivery (SPEC 14: per-listing charge and radius)
+export const DELIVERY_RADIUS_MIN_KM = 1;
+export const DELIVERY_RADIUS_MAX_KM = 50;
+
+// Rental packages (SPEC 13: suggested presets plus custom durations)
+export const RENTAL_PACKAGE_PRESET_DAYS = Object.freeze([1, 3, 7]);
+export const RENTAL_PACKAGES_MAX = 6;
+export const RENTAL_PACKAGE_MAX_DAYS = 30;
+
+// Lists
+export const PAGE_SIZE_DEFAULT = 20;
+export const PAGE_SIZE_MAX = 50;

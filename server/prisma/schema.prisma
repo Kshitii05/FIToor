@@ -50,6 +50,8 @@ model User {
   preferences   UserPreferences?
   verifications UserVerification[]
   sessions      UserSession[]
+  listings      Listing[]
+  listingEvents ListingStatusEvent[]
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -118,4 +120,129 @@ model UserSession {
 
   @@index([userId])
   @@map("user_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Listings
+// ---------------------------------------------------------------------------
+
+enum ListingMode {
+  SALE
+  RENT
+}
+
+enum ListingStatus {
+  ACTIVE
+  PAUSED
+  UNDER_REVIEW
+  REMOVED
+}
+
+enum ListingCategory {
+  ETHNIC_WEAR
+  WESTERN_WEAR
+  FOOTWEAR
+  ACCESSORIES
+  BAGS
+  FORMAL_WEAR
+}
+
+enum ItemCondition {
+  NEW
+  GOOD
+  FAIR
+}
+
+// A listing is for sale or for rent, never both. CHECK constraints in the
+// migration tie the sale fields and the rent fields to the mode. Amounts are paise.
+model Listing {
+  id          String          @id @default(uuid()) @db.Uuid
+  sellerId    String          @map("seller_id") @db.Uuid
+  mode        ListingMode
+  status      ListingStatus   @default(ACTIVE)
+  title       String
+  description String
+  category    ListingCategory
+  condition   ItemCondition
+  brand       String
+  size        String
+  colour      String
+
+  // Sale only
+  pricePaise Int? @map("price_paise")
+  quantity   Int?
+
+  // Rent only
+  depositPaise       Int? @map("deposit_paise")
+  lateFeePerDayPaise Int? @map("late_fee_per_day_paise")
+
+  // Fulfilment: delivery, pickup or both
+  offersDelivery      Boolean @map("offers_delivery")
+  deliveryChargePaise Int?    @map("delivery_charge_paise")
+  deliveryRadiusKm    Int?    @map("delivery_radius_km")
+  offersPickup        Boolean @map("offers_pickup")
+
+  createdAt DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // Soft delete: the row stays so orders and bookings can still refer to it.
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  seller       User                 @relation(fields: [sellerId], references: [id])
+  packages     RentalPackage[]
+  images       ListingImage[]
+  statusEvents ListingStatusEvent[]
+
+  // Target of the rental package foreign key, which carries the mode.
+  @@unique([id, mode])
+  @@index([sellerId, deletedAt, status])
+  @@map("listings")
+}
+
+// Owner-defined rental package: a duration and its price. The foreign key includes
+// the mode, fixed to RENT by a CHECK, so a sale listing cannot have packages.
+model RentalPackage {
+  id           String      @id @default(uuid()) @db.Uuid
+  listingId    String      @map("listing_id") @db.Uuid
+  listingMode  ListingMode @default(RENT) @map("listing_mode")
+  durationDays Int         @map("duration_days")
+  pricePaise   Int         @map("price_paise")
+
+  listing Listing @relation(fields: [listingId, listingMode], references: [id, mode], onDelete: Cascade)
+
+  @@unique([listingId, durationDays])
+  @@map("rental_packages")
+}
+
+// Positions 0 to 7, unique per listing: at most 8 images, enforced by the database.
+model ListingImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  url       String
+  // Identifier in the image store, needed to delete the file.
+  storageId String   @map("storage_id")
+  position  Int
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, position])
+  @@map("listing_images")
+}
+
+// Append-only history of what happened to a listing and who did it.
+model ListingStatusEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  listingId   String         @map("listing_id") @db.Uuid
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  action      String
+  fromStatus  ListingStatus? @map("from_status")
+  toStatus    ListingStatus? @map("to_status")
+  reason      String?
+  createdAt   DateTime       @map("created_at") @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id])
+  actor   User?   @relation(fields: [actorUserId], references: [id])
+
+  @@index([listingId, createdAt])
+  @@map("listing_status_events")
 }

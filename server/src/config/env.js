@@ -29,6 +29,9 @@ const schema = z.object({
   SMTP_USER: optionalString,
   SMTP_PASS: optionalString,
   EMAIL_FROM: z.string().min(1).default('no-reply@localhost'),
+  CLOUDINARY_CLOUD_NAME: optionalString,
+  CLOUDINARY_API_KEY: optionalString,
+  CLOUDINARY_API_SECRET: optionalString,
 });
 
 const parsed = schema.safeParse(process.env);
@@ -38,6 +41,17 @@ if (!parsed.success) {
     .map((issue) => `  ${issue.path.join('.')}: ${issue.message}`)
     .join('\n');
   throw new Error(`Invalid environment configuration (see .env.example):\n${problems}`);
+}
+
+const cloudinary = [
+  parsed.data.CLOUDINARY_CLOUD_NAME,
+  parsed.data.CLOUDINARY_API_KEY,
+  parsed.data.CLOUDINARY_API_SECRET,
+];
+if (cloudinary.some(Boolean) && !cloudinary.every(Boolean)) {
+  throw new Error(
+    'Invalid environment configuration: set all three CLOUDINARY_* values, or none of them',
+  );
 }
 
 export const env = Object.freeze(parsed.data);

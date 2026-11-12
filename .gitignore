@@ -16,3 +16,6 @@ coverage/
 *.log
 .vite/
 .eslintcache
+
+# Locally stored uploads (development without an image host)
+server/uploads/
