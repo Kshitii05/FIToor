@@ -4,5 +4,3 @@ coverage
 package-lock.json
 server/prisma/migrations
 docs
-CLAUDE.md
-.claude
