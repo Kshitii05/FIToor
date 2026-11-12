@@ -23,9 +23,13 @@ export function createFixedClock(start) {
     set: (instant) => {
       current = toDate(instant);
     },
-    advance: ({ days = 0, hours = 0, minutes = 0 } = {}) => {
+    advance: ({ days = 0, hours = 0, minutes = 0, seconds = 0 } = {}) => {
       current = new Date(
-        current.getTime() + days * MS_PER_DAY + hours * MS_PER_HOUR + minutes * MS_PER_MINUTE,
+        current.getTime() +
+          days * MS_PER_DAY +
+          hours * MS_PER_HOUR +
+          minutes * MS_PER_MINUTE +
+          seconds * 1000,
       );
     },
   };

@@ -32,6 +32,9 @@ describe('clock', () => {
     clock.advance({ days: 1, minutes: 30 });
     expect(clock.now().toISOString()).toBe('2026-11-16T07:00:00.000Z');
 
+    clock.advance({ seconds: 45 });
+    expect(clock.now().toISOString()).toBe('2026-11-16T07:00:45.000Z');
+
     clock.set('2027-01-01T00:00:00.000Z');
     expect(clock.now().toISOString()).toBe('2027-01-01T00:00:00.000Z');
   });
