@@ -9,6 +9,12 @@ import { z } from 'zod';
 const rootEnvPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env');
 dotenv.config({ path: rootEnvPath, quiet: true });
 
+// An empty value in .env (`SMTP_HOST=`) means "not set".
+const optionalString = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().optional(),
+);
+
 const schema = z.object({
   APP_NAME: z.string().min(1),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -16,6 +22,13 @@ const schema = z.object({
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+  JWT_SECRET: z.string().min(32),
+  OTP_SECRET: z.string().min(32),
+  SMTP_HOST: optionalString,
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: optionalString,
+  SMTP_PASS: optionalString,
+  EMAIL_FROM: z.string().min(1).default('no-reply@localhost'),
 });
 
 const parsed = schema.safeParse(process.env);

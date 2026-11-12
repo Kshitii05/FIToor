@@ -25,6 +25,10 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: testDatabaseUrl,
+      // Fixed, test-only secrets so the suite does not depend on local .env values.
+      JWT_SECRET: 'test-only-jwt-secret-0123456789abcdef0123456789',
+      OTP_SECRET: 'test-only-otp-secret-0123456789abcdef0123456789',
+      SMTP_HOST: '',
     },
   },
 });

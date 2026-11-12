@@ -9,3 +9,113 @@ datasource db {
 
 // Models are added per module. PostGIS columns use Unsupported("geography(Point,4326)")
 // with GiST indexes and exclusion constraints written in raw SQL migrations.
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  PENDING_DELETION
+  DELETED
+}
+
+enum VerificationChannel {
+  EMAIL
+  PHONE
+}
+
+enum VerificationPurpose {
+  VERIFY
+  PASSWORD_RESET
+}
+
+model User {
+  id                   String     @id @default(uuid()) @db.Uuid
+  // Stored lower-cased; a CHECK constraint in the migration enforces it.
+  email                String     @unique
+  // E.164. Null only after the account has been erased.
+  phone                String?    @unique
+  passwordHash         String     @map("password_hash")
+  emailVerifiedAt      DateTime?  @map("email_verified_at") @db.Timestamptz(3)
+  phoneVerifiedAt      DateTime?  @map("phone_verified_at") @db.Timestamptz(3)
+  status               UserStatus @default(ACTIVE)
+  deletionRequestedAt  DateTime?  @map("deletion_requested_at") @db.Timestamptz(3)
+  deletionScheduledFor DateTime?  @map("deletion_scheduled_for") @db.Timestamptz(3)
+  deletedAt            DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  profile       UserProfile?
+  preferences   UserPreferences?
+  verifications UserVerification[]
+  sessions      UserSession[]
+
+  @@index([status, deletionScheduledFor])
+  @@map("users")
+}
+
+model UserProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  displayName String   @map("display_name")
+  bio         String?
+  photoUrl    String?  @map("photo_url")
+  // Free-text area name shown publicly. Never an address.
+  locality    String?
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserPreferences {
+  userId             String   @id @map("user_id") @db.Uuid
+  emailNotifications Boolean  @default(true) @map("email_notifications")
+  inAppNotifications Boolean  @default(true) @map("in_app_notifications")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// One row per one-time code sent. Only the newest row for a user, channel and
+// purpose can be redeemed; the rows also drive resend throttling.
+model UserVerification {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String              @map("user_id") @db.Uuid
+  channel    VerificationChannel
+  purpose    VerificationPurpose
+  codeHash   String              @map("code_hash")
+  expiresAt  DateTime            @map("expires_at") @db.Timestamptz(3)
+  attempts   Int                 @default(0)
+  consumedAt DateTime?           @map("consumed_at") @db.Timestamptz(3)
+  createdAt  DateTime            @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, channel, purpose, createdAt])
+  @@map("user_verifications")
+}
+
+// One row per signed-in device. The refresh token rotates in place; the previous
+// token's hash is kept so that replaying it revokes the session.
+model UserSession {
+  id                       String    @id @default(uuid()) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  refreshTokenHash         String    @unique @map("refresh_token_hash")
+  previousRefreshTokenHash String?   @unique @map("previous_refresh_token_hash")
+  expiresAt                DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason            String?   @map("revoked_reason")
+  userAgent                String?   @map("user_agent")
+  ipAddress                String?   @map("ip_address")
+  createdAt                DateTime  @map("created_at") @db.Timestamptz(3)
+  lastRotatedAt            DateTime? @map("last_rotated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}

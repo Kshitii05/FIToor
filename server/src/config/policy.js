@@ -27,7 +27,14 @@ export const APPEAL_WINDOW_DAYS = 3;
 export const APPEALS_PER_DISPUTE = 1;
 
 // Accounts
-export const ACCOUNT_RECOVERY_DAYS = 30; // DECISIONS I16
+export const ACCOUNT_RECOVERY_DAYS = 30; // SPEC 15, DECISIONS I16
+export const ACCOUNT_PURGE_INTERVAL_MINUTES = 60; // how often expired deletions are erased
+export const PASSWORD_MIN_LENGTH = 8; // DECISIONS I19 (PROVISIONAL)
+export const PASSWORD_MAX_BYTES = 72; // bcrypt ignores anything beyond 72 bytes
+export const DISPLAY_NAME_MIN_LENGTH = 2;
+export const DISPLAY_NAME_MAX_LENGTH = 50;
+export const BIO_MAX_LENGTH = 500;
+export const LOCALITY_MAX_LENGTH = 80;
 
 // OTP (DECISIONS I2, PROVISIONAL)
 export const OTP_LENGTH = 6;
@@ -38,3 +45,13 @@ export const OTP_MAX_RESENDS_PER_HOUR = 5;
 
 // Sessions (DECISIONS I3, PROVISIONAL)
 export const ACCESS_TOKEN_TTL_MINUTES = 15;
+export const REFRESH_TOKEN_TTL_DAYS = 30; // DECISIONS I21 (PROVISIONAL)
+
+// Rate limits per IP address (DECISIONS I22, PROVISIONAL). OTP sends are additionally
+// limited per user by the OTP values above.
+export const RATE_LIMITS = Object.freeze({
+  login: Object.freeze({ windowMinutes: 15, max: 10 }),
+  register: Object.freeze({ windowMinutes: 60, max: 5 }),
+  passwordReset: Object.freeze({ windowMinutes: 60, max: 5 }),
+  otp: Object.freeze({ windowMinutes: 15, max: 30 }),
+});
