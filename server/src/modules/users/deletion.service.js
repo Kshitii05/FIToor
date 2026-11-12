@@ -152,6 +152,11 @@ export async function purgeExpiredDeletions({ db, clock }) {
       await tx.userPreferences.deleteMany({ where: { userId: id } });
       await tx.userVerification.deleteMany({ where: { userId: id } });
       await tx.userSession.deleteMany({ where: { userId: id } });
+      // Their listings leave the marketplace; the rows stay for past transactions.
+      await tx.listing.updateMany({
+        where: { sellerId: id, deletedAt: null },
+        data: { deletedAt: now },
+      });
       purged += 1;
     });
   }

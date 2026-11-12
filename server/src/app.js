@@ -4,16 +4,22 @@ import express from 'express';
 import helmet from 'helmet';
 import { API_PREFIX } from './config/app.js';
 import { env } from './config/env.js';
-import { createRequireAuth } from './lib/auth.js';
+import { createOptionalAuth, createRequireAuth } from './lib/auth.js';
 import { systemClock } from './lib/clock.js';
 import { db as defaultDb } from './lib/db.js';
 import { createErrorHandler, notFoundHandler } from './lib/errors.js';
+import { createImageStorage, LOCAL_UPLOADS_ROUTE } from './lib/imageStorage.js';
 import { createEmailSender } from './lib/mailer.js';
 import { createOtpSender } from './lib/otpSender.js';
 import { createLimiters } from './lib/rateLimit.js';
 import { createRedisRateLimitStore } from './lib/redis.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
+import {
+  createListingsRouter,
+  createMyListingsRouter,
+  createSellerListingsRouter,
+} from './modules/listings/listings.routes.js';
 import { createMeRouter, createUsersRouter } from './modules/users/users.routes.js';
 
 /**
@@ -29,6 +35,7 @@ export function createApp({
   logger = console,
   emailSender = createEmailSender({ logger }),
   otpSender = createOtpSender({ logger }),
+  imageStorage = createImageStorage(),
   rateLimiting = { enabled: env.NODE_ENV !== 'test', makeStore: createRedisRateLimitStore },
   configureRoutes,
 } = {}) {
@@ -43,20 +50,31 @@ export function createApp({
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
+  // Development without an image host keeps uploads on disk and serves them here.
+  if (imageStorage.localDirectory) {
+    app.use(LOCAL_UPLOADS_ROUTE, express.static(imageStorage.localDirectory, { index: false }));
+  }
+
+  const requireAuth = createRequireAuth({ db, clock });
   const deps = {
     db,
     clock,
     logger,
     emailSender,
     otpSender,
+    imageStorage,
     limiters: createLimiters(rateLimiting),
-    requireAuth: createRequireAuth({ db, clock }),
+    requireAuth,
+    optionalAuth: createOptionalAuth(requireAuth),
   };
 
   const api = express.Router();
   api.use('/health', createHealthRouter(deps));
   api.use('/auth', createAuthRouter(deps));
+  api.use('/listings', createListingsRouter(deps));
+  api.use('/me/listings', createMyListingsRouter(deps));
   api.use('/me', createMeRouter(deps));
+  api.use('/users', createSellerListingsRouter(deps));
   api.use('/users', createUsersRouter(deps));
   configureRoutes?.(api);
   app.use(API_PREFIX, api);
