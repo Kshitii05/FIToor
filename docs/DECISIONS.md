@@ -37,6 +37,14 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I15 | Conversion-rate denominator | Unique listing views (one per user per listing per day) in the selected period. | PROVISIONAL |
 | I16 | Account deletion timing | The 30-day recovery period starts at the deletion request. Deletion is refused while the user has active orders, rentals, disputes or unpaid payouts. | PROVISIONAL |
 | I17 | Rental condition photos | At least 2 timestamped photos at handover and at return, uploaded by the party handing the item over. | PROVISIONAL |
+| I18 | Sign-up and login | Register with email, Indian mobile number, password and display name; log in with email + password. Unverified users can log in; modules that list, buy or rent require both email and phone to be verified. | PROVISIONAL |
+| I19 | Password rules | 8 characters minimum, 72 bytes maximum (the bcrypt limit), no composition rules. | PROVISIONAL |
+| I20 | Password reset | A 6-digit code emailed to the user, under the same limits as I2, rather than a reset link. A successful reset signs out every device. | PROVISIONAL |
+| I21 | Refresh token lifetime | 30 days from last use. Each refresh token works once; presenting an already-used one revokes that session. | PROVISIONAL |
+| I22 | Rate limits per IP address | Login and account recovery: 10 per 15 minutes. Registration: 5 per hour. Password reset requests and attempts: 5 per hour. OTP send and verify: 30 per 15 minutes, on top of the per-user limits in I2. | PROVISIONAL |
+| I23 | Email delivery | Sent through Nodemailer when `SMTP_*` is configured. No provider is chosen; in development emails are printed to the server console behind an `EmailSender` interface. | PROVISIONAL |
+| I24 | Recovering a deleted account | During the 30 days, login is refused with a message saying until when the account can be recovered; submitting the email and password to the recovery endpoint reactivates it. The email and phone stay reserved until the account is erased. | PROVISIONAL |
+| I25 | OTP resend count | "5 resends per hour" (I2) means the initial send plus 5 resends in any rolling hour, counted separately per channel and purpose. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -57,4 +65,5 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-12 — Added I18–I25 while building accounts and profiles (Module 1).
 - 2026-11-12 — Rewritten against the final specification. Former open questions are now SPEC sections 12–15; this file keeps only implementation-level defaults.
