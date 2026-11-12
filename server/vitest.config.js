@@ -29,6 +29,9 @@ export default defineConfig({
       JWT_SECRET: 'test-only-jwt-secret-0123456789abcdef0123456789',
       OTP_SECRET: 'test-only-otp-secret-0123456789abcdef0123456789',
       SMTP_HOST: '',
+      CLOUDINARY_CLOUD_NAME: '',
+      CLOUDINARY_API_KEY: '',
+      CLOUDINARY_API_SECRET: '',
     },
   },
 });

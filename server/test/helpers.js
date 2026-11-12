@@ -21,12 +21,14 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
   const clock = createFixedClock(start);
   const emails = [];
   const texts = [];
+  const imageStorage = createMemoryImageStorage();
 
   const app = createApp({
     clock,
     logger: silentLogger,
     emailSender: { send: async (message) => void emails.push(message) },
     otpSender: { send: async (message) => void texts.push(message) },
+    imageStorage,
     ...appOptions,
   });
 
@@ -37,11 +39,33 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
     clock,
     emails,
     texts,
+    imageStorage,
     lastEmailTo,
     /** The most recent code emailed to an address. */
     emailCode: (to) => lastEmailTo(to)?.text.match(/\b\d{6}\b/)?.[0],
     /** The most recent code sent to a phone number. */
     phoneCode: (phone) => texts.findLast((message) => message.phone === phone)?.code,
+  };
+}
+
+/** Stands in for the image host: remembers what was stored and what was removed. */
+export function createMemoryImageStorage() {
+  const stored = new Map();
+  const removed = [];
+  let next = 0;
+  return {
+    stored,
+    removed,
+    async upload({ buffer, extension, folder }) {
+      next += 1;
+      const storageId = `${folder}/test-${next}.${extension}`;
+      stored.set(storageId, buffer);
+      return { url: `https://images.test/${storageId}`, storageId };
+    },
+    async remove(storageId) {
+      stored.delete(storageId);
+      removed.push(storageId);
+    },
   };
 }
 
@@ -73,6 +97,17 @@ export async function registerUser(ctx, overrides = {}) {
     refreshCookie: refreshCookieFrom(res),
     bearer: { Authorization: `Bearer ${res.body.accessToken}` },
   };
+}
+
+/** Registers a user and marks both contacts verified, as needed to list, buy or rent. */
+export async function registerVerifiedUser(ctx, overrides = {}) {
+  const account = await registerUser(ctx, overrides);
+  const now = ctx.clock.now();
+  await db.user.update({
+    where: { id: account.user.id },
+    data: { emailVerifiedAt: now, phoneVerifiedAt: now },
+  });
+  return account;
 }
 
 /** The `name=value` refresh cookie pair set by a response, or null. */
