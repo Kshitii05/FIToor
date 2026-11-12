@@ -1,0 +1,60 @@
+# Decisions log
+
+## 1. Finalized decisions live in the spec
+
+Product and operational decisions are final and recorded in `docs/SPEC.md`:
+
+| Topic | SPEC section |
+|-------|--------------|
+| Financial and payment | 12 |
+| Rental operations | 13 |
+| Delivery and handover | 14 |
+| Platform policy and operations | 15 |
+| Cross-module consistency rules | 16 |
+
+They are deliberately **not** repeated here, so there is only one source of truth. If anything in this file disagrees with the spec, the spec wins.
+
+## 2. Implementation details the spec leaves open
+
+These are suggested defaults so development can proceed. They are `PROVISIONAL` until the team confirms them; change the status to `FINAL` when confirmed. Each value lives in `/server/src/config` so it can be changed in one place. If work depends on something not listed here or in the spec, stop and ask, then add it here.
+
+| ID | Question | Provisional default | Status |
+|----|----------|---------------------|--------|
+| I1 | Phone OTP provider | Not chosen. In development, OTPs are logged to the console behind an `OtpSender` interface so a real SMS provider can be plugged in later. | PROVISIONAL |
+| I2 | OTP limits | 6 digits, 10-minute expiry, 5 attempts, resend after 60 seconds, 5 resends per hour. | PROVISIONAL |
+| I3 | JWT strategy | 15-minute access token + rotating refresh token in an httpOnly cookie, tracked in `user_sessions`. | PROVISIONAL |
+| I4 | Checkout inventory reservation | Stock is reserved for 15 minutes when checkout starts; released on payment failure or expiry. | PROVISIONAL |
+| I5 | Payment window after rental approval | Renter has 12 hours to pay the fee + deposit; otherwise the booking expires and the dates are released. | PROVISIONAL |
+| I6 | Approximate public location | Public coordinates are snapped to a roughly 500 m grid; distance is shown rounded to 0.5 km. | PROVISIONAL |
+| I7 | Delivery charge for several items from one seller | The spec sets the charge per listing. For a cart with several items from the same seller, charge the highest single delivery charge among them, not the sum. | PROVISIONAL |
+| I8 | Discounts and taxes | The only "discount" in the MVP is an accepted negotiated offer; the commission base is the accepted price. No coupon system and no tax calculation in the MVP (see section 3). | PROVISIONAL |
+| I9 | Time and business days | Timestamps stored in UTC; deadlines evaluated in Asia/Kolkata. Business days are Monday–Friday; no public-holiday calendar in the MVP. | PROVISIONAL |
+| I10 | Start of the 7-day issue window, and payout eligibility | The 7 days run from the moment delivery is confirmed (buyer confirmation or admin verification). A sale order becomes payout-eligible only after that window closes with no open issue. Rentals become payout-eligible when the deposit is settled with no open dispute. | PROVISIONAL |
+| I11 | Missed dispatch deadline | After 3 business days without dispatch or a buyer-approved extension, the buyer gets a "cancel for full refund" option. It is not automatic. | PROVISIONAL |
+| I12 | Damage claim larger than the deposit | Deductions through the platform are capped at the deposit. Any excess (damage or late fees) is recorded as an amount owed and handled manually by admin. | PROVISIONAL |
+| I13 | Appeals | One appeal per dispute, filed within 3 days of the decision with new evidence or a reason; the appeal decision is final. Payouts and refunds for that dispute stay on hold until the appeal window closes. | PROVISIONAL |
+| I14 | Seller bank details | Seller enters account holder name, account number and IFSC. Stored encrypted and shown masked. Verification is a manual admin step in the MVP. | PROVISIONAL |
+| I15 | Conversion-rate denominator | Unique listing views (one per user per listing per day) in the selected period. | PROVISIONAL |
+| I16 | Account deletion timing | The 30-day recovery period starts at the deletion request. Deletion is refused while the user has active orders, rentals, disputes or unpaid payouts. | PROVISIONAL |
+| I17 | Rental condition photos | At least 2 timestamped photos at handover and at return, uploaded by the party handing the item over. | PROVISIONAL |
+
+## 3. External verification gates
+
+SPEC section 17 lists what is **not yet confirmed**: Razorpay eligibility and refund/deposit behaviour, India-specific legal and tax review, bank payout operations, infrastructure, and some policy timing details.
+
+Rules while these are open:
+
+- Build and test against Razorpay test mode only. Live payments stay disabled.
+- Do not write code, UI copy or documentation that states any of these as confirmed.
+- Nothing in this file is legal, tax or payment-provider advice.
+
+| Gate | Checked by | Date | Outcome |
+|------|-----------|------|---------|
+| Razorpay refunds, partial refunds, deposit flow | | | |
+| Legal / tax review | | | |
+| Bank payout procedure | | | |
+| Hosting: PostGIS, Redis, backups | | | |
+
+## Change log
+
+- 2026-11-12 — Rewritten against the final specification. Former open questions are now SPEC sections 12–15; this file keeps only implementation-level defaults.

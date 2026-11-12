@@ -1,0 +1,18 @@
+# Local working files (never commit)
+CLAUDE.md
+.claude/
+docs/PROMPTS.md
+docs/PROGRESS.md
+
+# Secrets and build output
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+
+# Tooling output
+coverage/
+*.log
+.vite/
+.eslintcache

@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models are added per module. PostGIS columns use Unsupported("geography(Point,4326)")
+// with GiST indexes and exclusion constraints written in raw SQL migrations.
