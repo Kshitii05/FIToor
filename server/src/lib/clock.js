@@ -39,6 +39,10 @@ export function addMinutes(instant, minutes) {
   return new Date(toDate(instant).getTime() + minutes * MS_PER_MINUTE);
 }
 
+export function addSeconds(instant, seconds) {
+  return new Date(toDate(instant).getTime() + seconds * 1000);
+}
+
 export function addHours(instant, hours) {
   return new Date(toDate(instant).getTime() + hours * MS_PER_HOUR);
 }

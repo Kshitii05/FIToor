@@ -46,6 +46,9 @@ export const OTP_MAX_RESENDS_PER_HOUR = 5;
 // Sessions (DECISIONS I3, PROVISIONAL)
 export const ACCESS_TOKEN_TTL_MINUTES = 15;
 export const REFRESH_TOKEN_TTL_DAYS = 30; // DECISIONS I21 (PROVISIONAL)
+// A just-replaced refresh token presented again within this window is refused without
+// ending the session (two browser tabs refreshing together); after it, the session ends.
+export const REFRESH_REUSE_GRACE_SECONDS = 10;
 
 // Rate limits per IP address (DECISIONS I22, PROVISIONAL). OTP sends are additionally
 // limited per user by the OTP values above.

@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { API_PREFIX } from '../../config/app.js';
 import { env } from '../../config/env.js';
-import { REFRESH_TOKEN_TTL_DAYS } from '../../config/policy.js';
+import { REFRESH_REUSE_GRACE_SECONDS, REFRESH_TOKEN_TTL_DAYS } from '../../config/policy.js';
 import { REFRESH_COOKIE_NAME } from '../../config/security.js';
 import { signAccessToken } from '../../lib/auth.js';
-import { addDays } from '../../lib/clock.js';
+import { addDays, addSeconds } from '../../lib/clock.js';
 import { AppError } from '../../lib/errors.js';
 
 // Refresh tokens are random, so a plain SHA-256 is enough to keep them out of the database.
@@ -56,8 +56,15 @@ export async function rotateSession(db, clock, refreshToken) {
   });
 
   if (!session) {
+    // The token was already exchanged. Two tabs of one browser refreshing at the
+    // same moment look like this too, so a replay right after the rotation is only
+    // refused; any later replay means the token leaked and ends the session.
     await db.userSession.updateMany({
-      where: { previousRefreshTokenHash: presentedHash, revokedAt: null },
+      where: {
+        previousRefreshTokenHash: presentedHash,
+        revokedAt: null,
+        lastRotatedAt: { lte: addSeconds(now, -REFRESH_REUSE_GRACE_SECONDS) },
+      },
       data: { revokedAt: now, revokedReason: 'REFRESH_TOKEN_REUSED' },
     });
     throw invalidSession();

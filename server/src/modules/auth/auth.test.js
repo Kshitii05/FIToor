@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { MemoryStore } from 'express-rate-limit';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { RATE_LIMITS } from '../../config/policy.js';
+import { RATE_LIMITS, REFRESH_REUSE_GRACE_SECONDS } from '../../config/policy.js';
 import {
   createTestContext,
   db,
@@ -181,6 +181,7 @@ describe('refresh', () => {
     const first = await request(ctx.app).post(`${API}/auth/refresh`).set('Cookie', refreshCookie);
     expect(first.status).toBe(200);
 
+    ctx.clock.advance({ seconds: REFRESH_REUSE_GRACE_SECONDS });
     const replay = await request(ctx.app).post(`${API}/auth/refresh`).set('Cookie', refreshCookie);
     expect(replay.status).toBe(401);
 
@@ -194,6 +195,24 @@ describe('refresh', () => {
       .get(`${API}/me`)
       .set('Authorization', `Bearer ${first.body.accessToken}`);
     expect(me.status).toBe(401);
+  });
+
+  it('refuses a replay right after the rotation without ending the session', async () => {
+    const ctx = createTestContext();
+    const { refreshCookie } = await registerUser(ctx);
+
+    // Two tabs of one browser refreshing at the same moment with the same cookie.
+    const first = await request(ctx.app).post(`${API}/auth/refresh`).set('Cookie', refreshCookie);
+    ctx.clock.advance({ seconds: REFRESH_REUSE_GRACE_SECONDS - 1 });
+    const second = await request(ctx.app).post(`${API}/auth/refresh`).set('Cookie', refreshCookie);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(401);
+
+    const next = await request(ctx.app)
+      .post(`${API}/auth/refresh`)
+      .set('Cookie', refreshCookieFrom(first));
+    expect(next.status).toBe(200);
   });
 
   it('stops working 30 days after the last use', async () => {
