@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { SavedPlaces } from '../components/map/SavedPlaces.jsx';
+import { SavedAddresses } from '../components/orders/Addresses.jsx';
 import { TextLink } from '../components/layout/AppLayout.jsx';
 import {
   Alert,
@@ -316,6 +317,7 @@ export default function ProfilePage() {
       <div className="mt-6 space-y-5">
         <ProfileDetails />
         <AccountDetails />
+        <SavedAddresses />
         <SavedPlaces />
         <NotificationPreferences />
         <SignOut />
