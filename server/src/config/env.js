@@ -34,6 +34,9 @@ const schema = z.object({
   CLOUDINARY_API_SECRET: optionalString,
   // Development only: password given to the demo accounts made by the seed script.
   SEED_USER_PASSWORD: optionalString,
+  // An email address or website OpenStreetMap can reach you at about place-search
+  // traffic; their usage policy asks for one.
+  GEOCODER_CONTACT: optionalString,
 });
 
 const parsed = schema.safeParse(process.env);

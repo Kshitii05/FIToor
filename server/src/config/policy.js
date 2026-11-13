@@ -57,6 +57,7 @@ export const RATE_LIMITS = Object.freeze({
   register: Object.freeze({ windowMinutes: 60, max: 5 }),
   passwordReset: Object.freeze({ windowMinutes: 60, max: 5 }),
   otp: Object.freeze({ windowMinutes: 15, max: 30 }),
+  places: Object.freeze({ windowMinutes: 1, max: 30 }),
 });
 
 // Listings (SPEC Module 2; limits are DECISIONS I26 to I31, PROVISIONAL)
@@ -113,3 +114,24 @@ export const BUDGET_MAX_PAISE = 1_000_00;
 // much a match on each attribute of a listing counts.
 export const RECOMMENDATION_SIGNAL_WEIGHTS = Object.freeze({ viewed: 1, liked: 3, purchased: 5 });
 export const RECOMMENDATION_MATCH_WEIGHTS = Object.freeze({ category: 3, brand: 2, size: 1 });
+
+// Location (SPEC Module 5; DECISIONS I6 and I39 to I46, PROVISIONAL)
+// Listings are shown at the centre of a grid square of about 500 m, never at their
+// exact spot; distances are measured from that centre and rounded up.
+export const LOCATION_GRID_DEGREES = 0.0045; // about 500 m of latitude
+export const DISTANCE_ROUNDING_KM = 0.5;
+export const SEARCH_RADIUS_OPTIONS_KM = Object.freeze([2, 5, 10, 25, 50]);
+// A position sent from a device is rounded to this many decimals (about 100 m) and never stored.
+export const ORIGIN_DECIMALS = 3;
+export const TRENDING_NEAR_RADIUS_KM = 10;
+export const SAVED_LOCATIONS_MAX = 5;
+export const LOCATION_LABEL_MAX_LENGTH = 30;
+// Coordinates must fall inside this box around India.
+export const ALLOWED_AREA = Object.freeze({ minLat: 6, maxLat: 37.5, minLng: 68, maxLng: 97.5 });
+
+// Place search through OpenStreetMap's Nominatim service (I39). Its usage policy
+// allows at most one request per second; answers are cached.
+export const PLACE_LOOKUP_MIN_INTERVAL_MS = 1100;
+export const PLACE_LOOKUP_CACHE_DAYS = 30;
+export const PLACE_RESULTS_MAX = 5;
+export const PLACE_QUERY_MAX_LENGTH = 100;
