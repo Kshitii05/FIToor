@@ -3,18 +3,31 @@ import { createApp } from '../src/app.js';
 import { REFRESH_COOKIE_NAME } from '../src/config/security.js';
 import { createFixedClock } from '../src/lib/clock.js';
 import { db } from '../src/lib/db.js';
+import { createSimulatedGateway } from '../src/lib/paymentGateway.js';
 
 export { db };
 
 const silentLogger = { info() {}, warn() {}, error() {} };
 
 /**
- * Empties every table that tests write to. Plain deletes in dependency order: on
- * near-empty tables they are far quicker than TRUNCATE. Rows that hang off a
- * listing or a user (photos, packages, sessions, codes) go with their parent.
+ * Empties every table that tests write to, children first. Plain deletes are far
+ * quicker than TRUNCATE on near-empty tables. Append-only tables (ledger, webhook
+ * events, order history, admin log) accept deletes only with the setting below,
+ * which lasts for this transaction alone.
  */
 export async function resetDb() {
   await db.$transaction([
+    db.$executeRaw`SET LOCAL app.allow_record_deletion = 'on'`,
+    db.$executeRaw`DELETE FROM ledger_entries`,
+    db.$executeRaw`DELETE FROM payment_events`,
+    db.$executeRaw`DELETE FROM admin_audit_logs`,
+    db.$executeRaw`DELETE FROM order_events`,
+    db.$executeRaw`DELETE FROM refunds`,
+    db.$executeRaw`DELETE FROM order_issues`,
+    db.$executeRaw`DELETE FROM order_items`,
+    db.$executeRaw`DELETE FROM orders`,
+    db.$executeRaw`DELETE FROM payments`,
+    db.$executeRaw`DELETE FROM checkouts`,
     db.$executeRaw`DELETE FROM listing_status_events`,
     db.$executeRaw`DELETE FROM listings`,
     db.$executeRaw`DELETE FROM users`,
@@ -31,6 +44,10 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
   const texts = [];
   const imageStorage = createMemoryImageStorage();
   const placeLookup = createFakePlaceLookup();
+  const gateway = createSimulatedGateway({
+    keySecret: 'test-key-secret',
+    webhookSecret: 'test-webhook-secret',
+  });
 
   const app = createApp({
     clock,
@@ -39,6 +56,7 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
     otpSender: { send: async (message) => void texts.push(message) },
     imageStorage,
     placeLookup,
+    paymentGateway: gateway,
     ...appOptions,
   });
 
@@ -51,6 +69,7 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
     texts,
     imageStorage,
     placeLookup,
+    gateway,
     lastEmailTo,
     /** The most recent code emailed to an address. */
     emailCode: (to) => lastEmailTo(to)?.text.match(/\b\d{6}\b/)?.[0],
