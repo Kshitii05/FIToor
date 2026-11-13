@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-// One .env at the repository root serves the server, the client and docker compose.
+// One .env at the repository root serves both the server and the client.
 // Values already present in the environment (for example the test database URL set
 // by the test runner) are not overridden.
 const rootEnvPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env');
