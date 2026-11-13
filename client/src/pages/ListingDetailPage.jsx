@@ -8,6 +8,9 @@ import { api } from '../lib/api.js';
 import { categoryLabel, conditionLabel, daysLabel } from '../lib/listings.js';
 import { formatPaise } from '../lib/money.js';
 import { useListing } from '../lib/useListing.js';
+import { AreaMap } from '../components/map/Maps.jsx';
+import { useOrigin } from '../location/originContext.js';
+import { distanceLabel } from '../lib/location.js';
 
 function Gallery({ images, title }) {
   const [selected, setSelected] = useState(0);
@@ -292,7 +295,8 @@ export default function ListingDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const location = useLocation();
-  const { loading, listing, error, setListing } = useListing(id);
+  const { originQuery } = useOrigin();
+  const { loading, listing, error, setListing } = useListing(id, originQuery);
 
   if (loading) return <Loading label="Loading listing" />;
 
@@ -356,7 +360,28 @@ export default function ListingDetailPage() {
           <section>
             <h2 className="mb-1 text-sm font-medium text-ink">Getting it</h2>
             <Fulfilment listing={listing} />
+            {listing.deliversToYou === true ? (
+              <p className="mt-1 text-sm font-medium text-success">Delivers to where you are</p>
+            ) : null}
           </section>
+
+          {listing.location ? (
+            <section>
+              <h2 className="mb-1 text-sm font-medium text-ink">Where it is</h2>
+              <p className="mb-2 text-sm text-muted">
+                Around {listing.location.locality}
+                {listing.distanceKm !== null && listing.distanceKm !== undefined
+                  ? ` · ${distanceLabel(listing.distanceKm)}`
+                  : ''}
+              </p>
+              <AreaMap point={listing.location} />
+              <p className="mt-2 text-xs text-muted">
+                {isOwner
+                  ? 'Others see this area, not your exact pin. You can move the pin on the edit page.'
+                  : 'The circle shows the area, not the exact spot.'}
+              </p>
+            </section>
+          ) : null}
 
           <section>
             <h2 className="mb-2 text-sm font-medium text-ink">

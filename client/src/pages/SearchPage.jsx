@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ListingGrid } from '../components/listings/ListingCard.jsx';
+import { ResultsMap } from '../components/map/Maps.jsx';
+import { OriginPicker } from '../components/map/OriginPicker.jsx';
+import { useOrigin } from '../location/originContext.js';
+import { RADIUS_OPTIONS_KM } from '../lib/location.js';
 import {
   Alert,
   Button,
@@ -26,6 +30,7 @@ const SORTS = [
   { value: 'price_asc', label: 'Price: low to high' },
   { value: 'price_desc', label: 'Price: high to low' },
   { value: 'popular', label: 'Most popular' },
+  { value: 'nearest', label: 'Nearest first' },
 ];
 
 const MODES = [
@@ -34,10 +39,23 @@ const MODES = [
   { value: 'RENT', label: 'For rent' },
 ];
 
+const DISTANCES = [
+  { value: '', label: 'Any distance' },
+  ...RADIUS_OPTIONS_KM.map((km) => ({ value: String(km), label: `${km} km` })),
+];
+
+const VIEWS = [
+  { value: '', label: 'List' },
+  { value: 'map', label: 'Map' },
+];
+
 const listParam = (params, name) => (params.get(name) ?? '').split(',').filter(Boolean);
 
-/** The API request for the search described by the address bar. */
-function apiQueryFrom(params) {
+/**
+ * The API request for the search described by the address bar, plus where to
+ * measure distance from (`originQuery`, which is never put in the address bar).
+ */
+function apiQueryFrom(params, originQuery) {
   const query = new URLSearchParams();
   for (const name of [
     'q',
@@ -49,6 +67,7 @@ function apiQueryFrom(params) {
     'colour',
     'sort',
     'page',
+    'radiusKm',
   ]) {
     const value = params.get(name);
     if (value) query.set(name, value);
@@ -61,8 +80,9 @@ function apiQueryFrom(params) {
     if (paise !== null) query.set(apiName, String(paise));
   }
   if (params.get('available') === 'true') query.set('available', 'true');
+  if (params.get('deliversToMe') === 'true') query.set('deliversToMe', 'true');
   query.set('pageSize', '24');
-  return query.toString();
+  return originQuery ? `${query}&${originQuery}` : query.toString();
 }
 
 function CheckboxGroup({ legend, options, selected, onChange }) {
@@ -171,7 +191,7 @@ function PriceFilter({ minPrice, maxPrice, onApply }) {
   );
 }
 
-function Filters({ params, facets, update }) {
+function Filters({ params, facets, update, hasOrigin }) {
   const minPrice = params.get('minPrice') ?? '';
   const maxPrice = params.get('maxPrice') ?? '';
   return (
@@ -222,6 +242,14 @@ function Filters({ params, facets, update }) {
         checked={params.get('available') === 'true'}
         onChange={(checked) => update({ available: checked ? 'true' : '' })}
       />
+      {hasOrigin ? (
+        <Checkbox
+          label="Delivers to me"
+          description="Only sellers who deliver as far as you."
+          checked={params.get('deliversToMe') === 'true'}
+          onChange={(checked) => update({ deliversToMe: checked ? 'true' : '' })}
+        />
+      ) : null}
     </div>
   );
 }
@@ -236,6 +264,8 @@ const FILTER_NAMES = [
   'minPrice',
   'maxPrice',
   'available',
+  'radiusKm',
+  'deliversToMe',
 ];
 
 function describe(params) {
@@ -248,6 +278,7 @@ function describe(params) {
     else if (max !== null) parts.push(`up to ${formatPaise(max)}`);
     else if (min !== null) parts.push(`from ${formatPaise(min)}`);
   }
+  if (params.get('radiusKm')) parts.push(`within ${params.get('radiusKm')} km`);
   if (params.get('brand')) parts.push(params.get('brand'));
   return { q, parts };
 }
@@ -255,7 +286,8 @@ function describe(params) {
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
-  const apiQuery = apiQueryFrom(params);
+  const { choice, originQuery } = useOrigin();
+  const apiQuery = apiQueryFrom(params, originQuery);
   // Keyed by the request it answers, so an older reply never shows for a newer search.
   const [result, setResult] = useState({ key: null });
 
@@ -294,7 +326,14 @@ export default function SearchPage() {
 
   const activeFilters = FILTER_NAMES.filter((name) => params.get(name)).length;
   const hasKeyword = Boolean(params.get('q'));
-  const sortOptions = hasKeyword ? SORTS : SORTS.filter((sort) => sort.value !== 'relevance');
+  // Distance features need somewhere to measure from: a choice here, or the default
+  // saved place the server reported using.
+  const hasOrigin = Boolean(choice) || Boolean(data?.origin);
+  const needsOrigin = error?.code === 'LOCATION_REQUIRED';
+  const sortOptions = SORTS.filter(
+    (sort) => (sort.value !== 'relevance' || hasKeyword) && (sort.value !== 'nearest' || hasOrigin),
+  );
+  const showMap = params.get('view') === 'map';
   const currentSort = params.get('sort') ?? data?.sort ?? (hasKeyword ? 'relevance' : 'newest');
   const { q, parts } = describe(params);
 
@@ -321,6 +360,18 @@ export default function SearchPage() {
         </div>
       </div>
 
+      <div className="mt-5 space-y-3">
+        <OriginPicker active={data?.origin ?? null} />
+        {hasOrigin ? (
+          <FilterTabs
+            label="Distance"
+            options={DISTANCES}
+            value={params.get('radiusKm') ?? ''}
+            onChange={(radiusKm) => update({ radiusKm })}
+          />
+        ) : null}
+      </div>
+
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <FilterTabs
           label="Sale or rent"
@@ -339,6 +390,12 @@ export default function SearchPage() {
           {showFilters ? 'Hide filters' : 'Filters'}
           {activeFilters ? ` (${activeFilters})` : ''}
         </Button>
+        <FilterTabs
+          label="View"
+          options={VIEWS}
+          value={params.get('view') ?? ''}
+          onChange={(view) => update({ view, page: params.get('page') ?? '' })}
+        />
         {activeFilters ? (
           <Button
             variant="ghost"
@@ -357,12 +414,26 @@ export default function SearchPage() {
           className={`${showFilters ? 'block' : 'hidden'} lg:block`}
         >
           <Card className="lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-            <Filters params={params} facets={data?.facets} update={update} />
+            <Filters params={params} facets={data?.facets} update={update} hasOrigin={hasOrigin} />
           </Card>
         </aside>
 
         <section aria-label="Results" aria-busy={loading}>
-          {error && !loading ? (
+          {needsOrigin && !loading ? (
+            <Alert tone="notice" title="Choose where to search near">
+              <p>
+                Use your location or one of your saved places above, or drop the distance filters.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                onClick={() => update({ radiusKm: '', deliversToMe: '', sort: '' })}
+              >
+                Search everywhere
+              </Button>
+            </Alert>
+          ) : error && !loading ? (
             <Alert tone="error">{error.message}</Alert>
           ) : !data ? (
             <Loading label="Searching" />
@@ -374,7 +445,17 @@ export default function SearchPage() {
             </EmptyState>
           ) : (
             <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`}>
-              <ListingGrid listings={data.items} />
+              {showMap ? (
+                <>
+                  <ResultsMap listings={data.items} />
+                  <p className="mt-2 text-xs text-muted">
+                    Circles of about 500 m: listings are shown near, not at, their exact spot. This
+                    map shows the listings on this page.
+                  </p>
+                </>
+              ) : (
+                <ListingGrid listings={data.items} />
+              )}
               <Pagination
                 page={data.page}
                 totalPages={data.totalPages}

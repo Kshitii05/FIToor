@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../ui/index.js';
 import { LikeButton } from './LikeButton.jsx';
 import { categoryLabel, conditionLabel, headlinePrice, statusInfo } from '../../lib/listings.js';
+import { distanceLabel } from '../../lib/location.js';
 import { formatPaise } from '../../lib/money.js';
 
 export function StatusBadge({ status }) {
@@ -47,6 +48,14 @@ export function ListingCard({ listing }) {
           <p className="mt-1 truncate text-sm text-muted">
             {categoryLabel(listing.category)} · {conditionLabel(listing.condition)} · {listing.size}
           </p>
+          {listing.location ? (
+            <p className="mt-1 truncate text-sm text-muted">
+              {[distanceLabel(listing.distanceKm), listing.location.locality]
+                .filter(Boolean)
+                .join(' · ')}
+              {listing.deliversToYou ? ' · Delivers to you' : ''}
+            </p>
+          ) : null}
         </div>
       </Link>
       <div className="absolute right-2 top-2">

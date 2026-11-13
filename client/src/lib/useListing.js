@@ -6,28 +6,30 @@ import { api } from './api.js';
  * The result is keyed by id, so a listing loaded for a previous id is never shown
  * for the current one. `setListing` stores an updated copy returned by the API.
  */
-export function useListing(id) {
-  const [state, setState] = useState({ id: null });
+export function useListing(id, originQuery = '') {
+  // Keyed by the request, so a reply for another listing or origin never shows.
+  const key = `${id}?${originQuery}`;
+  const [state, setState] = useState({ key: null });
 
   useEffect(() => {
     let cancelled = false;
-    api(`/listings/${encodeURIComponent(id)}`)
+    api(`/listings/${encodeURIComponent(id)}${originQuery ? `?${originQuery}` : ''}`)
       .then((data) => {
-        if (!cancelled) setState({ id, listing: data.listing });
+        if (!cancelled) setState({ key, listing: data.listing });
       })
       .catch((error) => {
-        if (!cancelled) setState({ id, error });
+        if (!cancelled) setState({ key, error });
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, originQuery, key]);
 
-  const setListing = useCallback((listing) => setState({ id, listing }), [id]);
-  const current = state.id === id ? state : {};
+  const setListing = useCallback((listing) => setState({ key, listing }), [key]);
+  const current = state.key === key ? state : {};
 
   return {
-    loading: state.id !== id,
+    loading: state.key !== key,
     listing: current.listing ?? null,
     error: current.error ?? null,
     setListing,

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { ListingRow } from '../components/listings/ListingCard.jsx';
+import { OriginPicker } from '../components/map/OriginPicker.jsx';
+import { useOrigin } from '../location/originContext.js';
 import { Alert, ButtonLink, Card, Loading } from '../components/ui/index.js';
 import { APP_NAME } from '../config/app.js';
 import { api } from '../lib/api.js';
@@ -32,11 +34,12 @@ const SEE_ALL = {
 function Sections({ signedIn }) {
   // Keyed by sign-in state: "For You" appears only for signed-in people.
   const [result, setResult] = useState({ key: null });
-  const key = signedIn ? 'signedIn' : 'visitor';
+  const { originQuery } = useOrigin();
+  const key = `${signedIn ? 'signedIn' : 'visitor'}?${originQuery}`;
 
   useEffect(() => {
     let cancelled = false;
-    api('/home')
+    api(`/home${originQuery ? `?${originQuery}` : ''}`)
       .then((data) => {
         if (!cancelled) setResult({ key, data });
       })
@@ -46,7 +49,7 @@ function Sections({ signedIn }) {
     return () => {
       cancelled = true;
     };
-  }, [key]);
+  }, [key, originQuery]);
 
   if (result.key !== key) return <Loading label="Loading listings" />;
   if (result.error) return <Alert tone="error">{result.error.message}</Alert>;
@@ -60,27 +63,32 @@ function Sections({ signedIn }) {
     );
   }
 
-  return sections.map((section) => (
-    <section key={section.key} aria-labelledby={`section-${section.key}`}>
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2
-          id={`section-${section.key}`}
-          className="font-display text-2xl font-semibold tracking-tight text-ink"
-        >
-          {section.title}
-        </h2>
-        {SEE_ALL[section.key] ? (
-          <Link
-            to={SEE_ALL[section.key]}
-            className="shrink-0 text-sm font-medium text-accent underline-offset-4 hover:underline"
-          >
-            See all
-          </Link>
-        ) : null}
-      </div>
-      <ListingRow listings={section.items} />
-    </section>
-  ));
+  return (
+    <>
+      <OriginPicker active={result.data.origin} />
+      {sections.map((section) => (
+        <section key={section.key} aria-labelledby={`section-${section.key}`}>
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2
+              id={`section-${section.key}`}
+              className="font-display text-2xl font-semibold tracking-tight text-ink"
+            >
+              {section.title}
+            </h2>
+            {SEE_ALL[section.key] ? (
+              <Link
+                to={SEE_ALL[section.key]}
+                className="shrink-0 text-sm font-medium text-accent underline-offset-4 hover:underline"
+              >
+                See all
+              </Link>
+            ) : null}
+          </div>
+          <ListingRow listings={section.items} />
+        </section>
+      ))}
+    </>
+  );
 }
 
 export default function HomePage() {
