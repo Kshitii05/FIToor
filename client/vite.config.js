@@ -7,7 +7,7 @@ import { defineConfig, loadEnv } from 'vite';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export default defineConfig(({ mode }) => {
-  // The repository root .env is shared with the server; only APP_NAME and PORT are read here.
+  // The repository root .env is shared with the server; only APP_NAME, APP_TAGLINE and PORT are read here.
   const env = loadEnv(mode, rootDir, '');
   const appName = env.APP_NAME;
   if (!appName) {
@@ -23,9 +23,10 @@ export default defineConfig(({ mode }) => {
         transformIndexHtml: (html) => html.replaceAll('%APP_NAME%', appName),
       },
     ],
-    // Exposes only the product name to client code (see src/config/app.js).
+    // Exposes only the product name and tagline to client code (see src/config/app.js).
     define: {
       __APP_NAME__: JSON.stringify(appName),
+      __APP_TAGLINE__: JSON.stringify(env.APP_TAGLINE ?? ''),
     },
     server: {
       port: 5173,

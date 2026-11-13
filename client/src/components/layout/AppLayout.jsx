@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/authContext.js';
-import { APP_NAME } from '../../config/app.js';
+import { APP_NAME, APP_TAGLINE } from '../../config/app.js';
 import { Button, ButtonLink } from '../ui/index.js';
 
 function navLinkClass({ isActive }) {
@@ -96,7 +96,8 @@ export function AppLayout() {
 
       <footer className="border-t border-line">
         <div className="mx-auto max-w-5xl px-4 py-6 text-sm text-muted sm:px-6">
-          {APP_NAME} · Pre-loved fashion from people nearby
+          {APP_NAME}
+          {APP_TAGLINE ? ` · ${APP_TAGLINE}` : ''} · Pre-loved fashion from people nearby
         </div>
       </footer>
     </div>

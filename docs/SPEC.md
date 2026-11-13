@@ -1,6 +1,6 @@
 # Product and Technical Specification (Final)
 
-> **Naming:** the product name is not final. `{{APP_NAME}}` is a placeholder everywhere in this document.
+> **Naming:** the product name is **FIToor** ("fashion ka fitoor"), finalized on 13 November 2026. `{{APP_NAME}}` stands for it everywhere in this document.
 > In code, the name must come from a single `APP_NAME` constant/env value; never hard-code a product name.
 >
 > Final specification, dated 11 November 2026. Sections 12–15 record the finalized decisions; section 17 lists items still awaiting external verification.
