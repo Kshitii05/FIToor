@@ -37,6 +37,10 @@ const schema = z.object({
   // An email address or website OpenStreetMap can reach you at about place-search
   // traffic; their usage policy asks for one.
   GEOCODER_CONTACT: optionalString,
+  // Razorpay, test mode only. Without these, development uses a simulated payment.
+  RAZORPAY_KEY_ID: optionalString,
+  RAZORPAY_KEY_SECRET: optionalString,
+  RAZORPAY_WEBHOOK_SECRET: optionalString,
 });
 
 const parsed = schema.safeParse(process.env);
@@ -57,6 +61,21 @@ if (cloudinary.some(Boolean) && !cloudinary.every(Boolean)) {
   throw new Error(
     'Invalid environment configuration: set all three CLOUDINARY_* values, or none of them',
   );
+}
+
+const razorpay = [
+  parsed.data.RAZORPAY_KEY_ID,
+  parsed.data.RAZORPAY_KEY_SECRET,
+  parsed.data.RAZORPAY_WEBHOOK_SECRET,
+];
+if (razorpay.some(Boolean) && !razorpay.every(Boolean)) {
+  throw new Error(
+    'Invalid environment configuration: set all three RAZORPAY_* values, or none of them',
+  );
+}
+// Live payments stay disabled until the checks in SPEC section 17 are done.
+if (parsed.data.RAZORPAY_KEY_ID && !parsed.data.RAZORPAY_KEY_ID.startsWith('rzp_test_')) {
+  throw new Error('Only Razorpay test-mode keys (rzp_test_...) are allowed');
 }
 
 export const env = Object.freeze(parsed.data);

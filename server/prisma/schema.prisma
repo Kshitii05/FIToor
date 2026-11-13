@@ -40,6 +40,7 @@ model User {
   emailVerifiedAt      DateTime?  @map("email_verified_at") @db.Timestamptz(3)
   phoneVerifiedAt      DateTime?  @map("phone_verified_at") @db.Timestamptz(3)
   status               UserStatus @default(ACTIVE)
+  role                 UserRole   @default(USER)
   deletionRequestedAt  DateTime?  @map("deletion_requested_at") @db.Timestamptz(3)
   deletionScheduledFor DateTime?  @map("deletion_scheduled_for") @db.Timestamptz(3)
   deletedAt            DateTime?  @map("deleted_at") @db.Timestamptz(3)
@@ -56,6 +57,14 @@ model User {
   views         ListingView[]
   searches      SearchHistory[]
   locations     SavedLocation[]
+  cartItems     CartItem[]
+  addresses     Address[]
+  checkouts     Checkout[]
+  sellerGroups  CheckoutGroup[]      @relation("CheckoutGroupSeller")
+  purchases     Order[]              @relation("OrderBuyer")
+  sales         Order[]              @relation("OrderSeller")
+  orderEvents   OrderEvent[]
+  adminActions  AdminAuditLog[]
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -213,12 +222,15 @@ model Listing {
   // Kept equal to publicLat/publicLng by a database trigger, for radius search.
   publicLocation Unsupported("geography(Point,4326)")? @map("public_location")
 
-  seller       User                 @relation(fields: [sellerId], references: [id])
-  packages     RentalPackage[]
-  images       ListingImage[]
-  statusEvents ListingStatusEvent[]
-  likes        ListingLike[]
-  views        ListingView[]
+  seller        User                 @relation(fields: [sellerId], references: [id])
+  packages      RentalPackage[]
+  images        ListingImage[]
+  statusEvents  ListingStatusEvent[]
+  likes         ListingLike[]
+  views         ListingView[]
+  cartItems     CartItem[]
+  checkoutItems CheckoutItem[]
+  orderItems    OrderItem[]
 
   // Target of the rental package foreign key, which carries the mode.
   @@unique([id, mode])
@@ -345,4 +357,397 @@ model SavedLocation {
 
   @@index([userId, createdAt])
   @@map("saved_locations")
+}
+
+// ---------------------------------------------------------------------------
+// Cart, checkout and orders
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum Fulfilment {
+  DELIVERY
+  PICKUP
+}
+
+enum CheckoutStatus {
+  OPEN
+  PAID
+  EXPIRED
+}
+
+enum OrderStatus {
+  AWAITING_DISPATCH
+  AWAITING_PICKUP
+  DISPATCHED
+  DELIVERY_REPORTED
+  ADMIN_REVIEW
+  DELIVERED
+  ISSUE_OPEN
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum ExtensionStatus {
+  NONE
+  REQUESTED
+  ACCEPTED
+  DECLINED
+}
+
+enum PaymentStatus {
+  CAPTURED
+  FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum RefundReason {
+  BUYER_CANCELLED
+  SELLER_CANCELLED
+  ADMIN_CANCELLED
+  NOT_DELIVERED
+  ISSUE_FULL
+  ISSUE_PARTIAL
+  LATE_PAYMENT
+  DUPLICATE_PAYMENT
+}
+
+enum IssueKind {
+  WRONG_ITEM
+  DAMAGED
+  NOT_AS_DESCRIBED
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+}
+
+enum IssueResolution {
+  FULL_REFUND
+  PARTIAL_REFUND
+  REJECTED
+}
+
+enum LedgerEntryType {
+  BUYER_PAYMENT
+  COMMISSION
+  SELLER_PAYABLE
+  GATEWAY_FEE
+  BUYER_REFUND
+  COMMISSION_REVERSAL
+  SELLER_PAYABLE_REVERSAL
+}
+
+model CartItem {
+  userId    String   @map("user_id") @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  quantity  Int
+  addedAt   DateTime @map("added_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+  @@map("cart_items")
+}
+
+// A delivery address. Private: shown only to its owner, and to the seller of a paid
+// order (as a copy kept on the order).
+model Address {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  label         String
+  recipientName String   @map("recipient_name")
+  phone         String
+  line1         String
+  line2         String?
+  locality      String
+  city          String
+  state         String
+  pincode       String
+  lat           Float
+  lng           Float
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("addresses")
+}
+
+// A buyer's purchase of everything in their cart. Stock is reserved while OPEN.
+// Paying it creates one order per seller.
+model Checkout {
+  id             String         @id @default(uuid()) @db.Uuid
+  buyerId        String         @map("buyer_id") @db.Uuid
+  status         CheckoutStatus @default(OPEN)
+  totalPaise     Int            @map("total_paise")
+  gatewayOrderId String?        @unique @map("gateway_order_id")
+  expiresAt      DateTime       @map("expires_at") @db.Timestamptz(3)
+  createdAt      DateTime       @map("created_at") @db.Timestamptz(3)
+  paidAt         DateTime?      @map("paid_at") @db.Timestamptz(3)
+  // Set when the reserved stock went back to the listings (expiry, or replaced).
+  releasedAt     DateTime?      @map("released_at") @db.Timestamptz(3)
+
+  buyer    User            @relation(fields: [buyerId], references: [id])
+  groups   CheckoutGroup[]
+  items    CheckoutItem[]
+  payments Payment[]
+  orders   Order[]
+  refunds  Refund[]
+
+  @@index([buyerId, status])
+  @@index([status, expiresAt])
+  @@map("checkouts")
+}
+
+// One seller's part of a checkout, with how it will be handed over.
+model CheckoutGroup {
+  id                  String     @id @default(uuid()) @db.Uuid
+  checkoutId          String     @map("checkout_id") @db.Uuid
+  sellerId            String     @map("seller_id") @db.Uuid
+  fulfilment          Fulfilment
+  itemsSubtotalPaise  Int        @map("items_subtotal_paise")
+  deliveryChargePaise Int        @map("delivery_charge_paise")
+  // Copy of the delivery address at the time of checkout.
+  deliveryAddress     Json?      @map("delivery_address")
+
+  checkout Checkout       @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  seller   User           @relation("CheckoutGroupSeller", fields: [sellerId], references: [id])
+  items    CheckoutItem[]
+
+  @@unique([checkoutId, sellerId])
+  @@map("checkout_groups")
+}
+
+model CheckoutItem {
+  id             String @id @default(uuid()) @db.Uuid
+  checkoutId     String @map("checkout_id") @db.Uuid
+  groupId        String @map("group_id") @db.Uuid
+  listingId      String @map("listing_id") @db.Uuid
+  quantity       Int
+  unitPricePaise Int    @map("unit_price_paise")
+  title          String
+
+  checkout Checkout      @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  group    CheckoutGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  listing  Listing       @relation(fields: [listingId], references: [id])
+
+  @@map("checkout_items")
+}
+
+// One seller's order. Each change of status is validated by the server and
+// recorded in OrderEvent. Amounts are paise.
+model Order {
+  id                  String          @id @default(uuid()) @db.Uuid
+  ref                 String          @unique
+  checkoutId          String          @map("checkout_id") @db.Uuid
+  buyerId             String          @map("buyer_id") @db.Uuid
+  sellerId            String          @map("seller_id") @db.Uuid
+  status              OrderStatus
+  fulfilment          Fulfilment
+  itemsSubtotalPaise  Int             @map("items_subtotal_paise")
+  deliveryChargePaise Int             @map("delivery_charge_paise")
+  totalPaise          Int             @map("total_paise")
+  commissionPaise     Int             @map("commission_paise")
+  sellerPayablePaise  Int             @map("seller_payable_paise")
+  // Running totals of processed refunds, all of it and the part that was for items.
+  refundedPaise       Int             @default(0) @map("refunded_paise")
+  itemsRefundedPaise  Int             @default(0) @map("items_refunded_paise")
+  deliveryAddress     Json?           @map("delivery_address")
+  handoverCode        String?         @map("handover_code")
+  handoverAttempts    Int             @default(0) @map("handover_attempts")
+  courierReference    String?         @map("courier_reference")
+  dispatchDueAt       DateTime?       @map("dispatch_due_at") @db.Timestamptz(3)
+  dispatchWarnedAt    DateTime?       @map("dispatch_warned_at") @db.Timestamptz(3)
+  dispatchOverdueAt   DateTime?       @map("dispatch_overdue_at") @db.Timestamptz(3)
+  extensionStatus     ExtensionStatus @default(NONE) @map("extension_status")
+  extensionUntil      DateTime?       @map("extension_until") @db.Timestamptz(3)
+  dispatchedAt        DateTime?       @map("dispatched_at") @db.Timestamptz(3)
+  deliveryReportedAt  DateTime?       @map("delivery_reported_at") @db.Timestamptz(3)
+  receiptDueAt        DateTime?       @map("receipt_due_at") @db.Timestamptz(3)
+  deliveredAt         DateTime?       @map("delivered_at") @db.Timestamptz(3)
+  issueWindowEndsAt   DateTime?       @map("issue_window_ends_at") @db.Timestamptz(3)
+  completedAt         DateTime?       @map("completed_at") @db.Timestamptz(3)
+  cancelledAt         DateTime?       @map("cancelled_at") @db.Timestamptz(3)
+  createdAt           DateTime        @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  checkout Checkout     @relation(fields: [checkoutId], references: [id])
+  buyer    User         @relation("OrderBuyer", fields: [buyerId], references: [id])
+  seller   User         @relation("OrderSeller", fields: [sellerId], references: [id])
+  items    OrderItem[]
+  events   OrderEvent[]
+  refunds  Refund[]
+  issue    OrderIssue?
+
+  @@unique([checkoutId, sellerId])
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  orderId        String  @map("order_id") @db.Uuid
+  listingId      String  @map("listing_id") @db.Uuid
+  title          String
+  unitPricePaise Int     @map("unit_price_paise")
+  quantity       Int
+  // For pickup: the item's exact pin and area, shared with the buyer once paid.
+  pickupLat      Float?  @map("pickup_lat")
+  pickupLng      Float?  @map("pickup_lng")
+  pickupLocality String? @map("pickup_locality")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@map("order_items")
+}
+
+// Append-only history of an order: every change, who made it and why.
+model OrderEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  orderId     String       @map("order_id") @db.Uuid
+  actorUserId String?      @map("actor_user_id") @db.Uuid
+  actorRole   String       @map("actor_role")
+  action      String
+  fromStatus  OrderStatus? @map("from_status")
+  toStatus    OrderStatus? @map("to_status")
+  reason      String?
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
+}
+
+// A payment the gateway reported for a checkout.
+model Payment {
+  id               String        @id @default(uuid()) @db.Uuid
+  checkoutId       String        @map("checkout_id") @db.Uuid
+  gatewayOrderId   String        @map("gateway_order_id")
+  gatewayPaymentId String        @unique @map("gateway_payment_id")
+  amountPaise      Int           @map("amount_paise")
+  status           PaymentStatus
+  method           String?
+  feePaise         Int?          @map("fee_paise")
+  createdAt        DateTime      @map("created_at") @db.Timestamptz(3)
+  capturedAt       DateTime?     @map("captured_at") @db.Timestamptz(3)
+
+  checkout Checkout @relation(fields: [checkoutId], references: [id])
+  refunds  Refund[]
+
+  @@index([checkoutId])
+  @@map("payments")
+}
+
+// Every webhook received, once per gateway event id. Append-only.
+model PaymentEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  gatewayEventId String    @unique @map("gateway_event_id")
+  type           String
+  payload        Json
+  receivedAt     DateTime  @map("received_at") @db.Timestamptz(3)
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  @@map("payment_events")
+}
+
+// A refund of (part of) a payment. `key` makes each refund happen at most once.
+model Refund {
+  id               String       @id @default(uuid()) @db.Uuid
+  key              String       @unique
+  checkoutId       String       @map("checkout_id") @db.Uuid
+  orderId          String?      @map("order_id") @db.Uuid
+  paymentId        String       @map("payment_id") @db.Uuid
+  amountPaise      Int          @map("amount_paise")
+  // The part of the amount that was for items (the commission base).
+  itemsAmountPaise Int          @map("items_amount_paise")
+  reason           RefundReason
+  status           RefundStatus @default(PENDING)
+  gatewayRefundId  String?      @unique @map("gateway_refund_id")
+  attempts         Int          @default(0)
+  lastError        String?      @map("last_error")
+  createdAt        DateTime     @map("created_at") @db.Timestamptz(3)
+  lastAttemptAt    DateTime?    @map("last_attempt_at") @db.Timestamptz(3)
+  processedAt      DateTime?    @map("processed_at") @db.Timestamptz(3)
+
+  checkout Checkout @relation(fields: [checkoutId], references: [id])
+  order    Order?   @relation(fields: [orderId], references: [id])
+  payment  Payment  @relation(fields: [paymentId], references: [id])
+
+  @@index([status, lastAttemptAt])
+  @@map("refunds")
+}
+
+// A buyer's report about a delivered item (SPEC 15). Blocks payout while open.
+model OrderIssue {
+  id               String           @id @default(uuid()) @db.Uuid
+  orderId          String           @unique @map("order_id") @db.Uuid
+  kind             IssueKind
+  description      String
+  photos           Json
+  status           IssueStatus      @default(OPEN)
+  resolution       IssueResolution?
+  refundPaise      Int?             @map("refund_paise")
+  resolvedById     String?          @map("resolved_by_id") @db.Uuid
+  resolutionReason String?          @map("resolution_reason")
+  createdAt        DateTime         @map("created_at") @db.Timestamptz(3)
+  resolvedAt       DateTime?        @map("resolved_at") @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_issues")
+}
+
+// Append-only money record. Every row has a unique key, so the same event can
+// never be written twice; the database refuses updates and deletes.
+model LedgerEntry {
+  id          String          @id @default(uuid()) @db.Uuid
+  entryKey    String          @unique @map("entry_key")
+  type        LedgerEntryType
+  amountPaise Int             @map("amount_paise")
+  checkoutId  String?         @map("checkout_id") @db.Uuid
+  orderId     String?         @map("order_id") @db.Uuid
+  paymentId   String?         @map("payment_id") @db.Uuid
+  refundId    String?         @map("refund_id") @db.Uuid
+  sellerId    String?         @map("seller_id") @db.Uuid
+  createdAt   DateTime        @map("created_at") @db.Timestamptz(3)
+
+  @@index([checkoutId])
+  @@index([orderId])
+  @@index([sellerId, type])
+  @@map("ledger_entries")
+}
+
+// Append-only record of every admin action, with the reason given.
+model AdminAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  adminId    String   @map("admin_id") @db.Uuid
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String
+  details    Json?
+  createdAt  DateTime @map("created_at") @db.Timestamptz(3)
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
 }

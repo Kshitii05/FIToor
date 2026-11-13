@@ -58,6 +58,7 @@ export const RATE_LIMITS = Object.freeze({
   passwordReset: Object.freeze({ windowMinutes: 60, max: 5 }),
   otp: Object.freeze({ windowMinutes: 15, max: 30 }),
   places: Object.freeze({ windowMinutes: 1, max: 30 }),
+  checkout: Object.freeze({ windowMinutes: 15, max: 20 }),
 });
 
 // Listings (SPEC Module 2; limits are DECISIONS I26 to I31, PROVISIONAL)
@@ -135,3 +136,20 @@ export const PLACE_LOOKUP_MIN_INTERVAL_MS = 1100;
 export const PLACE_LOOKUP_CACHE_DAYS = 30;
 export const PLACE_RESULTS_MAX = 5;
 export const PLACE_QUERY_MAX_LENGTH = 100;
+
+// Cart, checkout and orders (SPEC Module 3, 12, 14, 15; DECISIONS I4, I7, I10, I11, I47 to I58)
+export const CART_ITEMS_MAX = 20;
+export const ADDRESSES_MAX = 5;
+export const RECEIPT_WINDOW_HOURS = 48; // SPEC 14: buyer confirms or reports after delivery
+export const DISPATCH_WARNING_HOURS = 24; // seller reminded this long before the deadline
+export const DISPATCH_EXTENSION_MAX_BUSINESS_DAYS = 3;
+export const HANDOVER_CODE_LENGTH = 6;
+export const HANDOVER_MAX_ATTEMPTS = 5;
+export const ISSUE_PHOTOS_MIN = 1;
+export const ISSUE_PHOTOS_MAX = 5;
+export const ISSUE_DESCRIPTION_MIN_LENGTH = 10;
+export const ISSUE_DESCRIPTION_MAX_LENGTH = 1000;
+export const REASON_MAX_LENGTH = 500;
+export const REFUND_RETRY_MAX_ATTEMPTS = 5;
+export const REFUND_RETRY_AFTER_MINUTES = 2;
+export const ORDER_JOBS_INTERVAL_SECONDS = 60;
