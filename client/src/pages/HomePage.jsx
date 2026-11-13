@@ -47,8 +47,9 @@ export default function HomePage() {
           {signedIn ? (
             <>
               {needsVerification ? <ButtonLink to="/verify">Verify my account</ButtonLink> : null}
-              <ButtonLink to="/profile" variant={needsVerification ? 'secondary' : 'primary'}>
-                My profile
+              {needsVerification ? null : <ButtonLink to="/listings/new">List an item</ButtonLink>}
+              <ButtonLink to="/my-listings" variant="secondary">
+                My listings
               </ButtonLink>
             </>
           ) : (

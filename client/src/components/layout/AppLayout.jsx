@@ -42,11 +42,26 @@ function AccountNav() {
 
   return (
     <>
+      <NavLink to="/my-listings" className={navLinkClass}>
+        <span className="hidden sm:inline">My listings</span>
+        <span className="sm:hidden">Listings</span>
+      </NavLink>
       <NavLink to="/profile" className={navLinkClass}>
         <span className="hidden sm:inline">{user.profile.displayName}</span>
         <span className="sm:hidden">Profile</span>
       </NavLink>
-      <Button variant="secondary" size="sm" loading={signingOut} onClick={handleSignOut}>
+      <ButtonLink to="/listings/new" size="sm">
+        <span className="hidden sm:inline">List an item</span>
+        <span className="sm:hidden">List</span>
+      </ButtonLink>
+      {/* On small screens signing out is on the profile page instead. */}
+      <Button
+        variant="secondary"
+        size="sm"
+        className="hidden sm:inline-flex"
+        loading={signingOut}
+        onClick={handleSignOut}
+      >
         Sign out
       </Button>
     </>

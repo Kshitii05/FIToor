@@ -193,6 +193,26 @@ function NotificationPreferences() {
   );
 }
 
+function SignOut() {
+  const { logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    // Signing out sends the user to the sign-in page, so there is nothing to reset.
+    await logout();
+  }
+
+  return (
+    <Card>
+      <SectionHeading title="Sign out" description="Ends your session on this device." />
+      <Button variant="secondary" loading={signingOut} onClick={handleSignOut}>
+        Sign out
+      </Button>
+    </Card>
+  );
+}
+
 function DeleteAccount() {
   const { clearSession } = useAuth();
   const [open, setOpen] = useState(false);
@@ -285,6 +305,7 @@ export default function ProfilePage() {
         <ProfileDetails />
         <AccountDetails />
         <NotificationPreferences />
+        <SignOut />
         <DeleteAccount />
       </div>
     </div>

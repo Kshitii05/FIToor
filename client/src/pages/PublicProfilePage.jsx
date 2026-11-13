@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, ButtonLink, Card, Loading } from '../components/ui/index.js';
+import { ListingGrid } from '../components/listings/ListingCard.jsx';
+import {
+  Alert,
+  ButtonLink,
+  Card,
+  EmptyState,
+  Loading,
+  Pagination,
+} from '../components/ui/index.js';
 import { api } from '../lib/api.js';
 import { formatMonthYear } from '../lib/format.js';
 
@@ -53,7 +61,7 @@ export default function PublicProfilePage() {
   const { user } = result;
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full max-w-4xl">
       <Card>
         <div className="flex items-center gap-4">
           {user.photoUrl ? (
@@ -80,6 +88,59 @@ export default function PublicProfilePage() {
           <p className="mt-5 whitespace-pre-line break-words text-ink">{user.bio}</p>
         ) : null}
       </Card>
+
+      {/* Remounted per profile so paging starts again at the first page. */}
+      <SellerListings key={user.id} sellerId={user.id} />
     </div>
+  );
+}
+
+function SellerListings({ sellerId }) {
+  const [page, setPage] = useState(1);
+  // Keyed by page, so a slow response for another page is never shown for this one.
+  const [result, setResult] = useState({ page: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    api(`/users/${encodeURIComponent(sellerId)}/listings?page=${page}`, { auth: false })
+      .then((data) => {
+        if (!cancelled) setResult({ page, data });
+      })
+      .catch((error) => {
+        if (!cancelled) setResult({ page, error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerId, page]);
+
+  const loading = result.page !== page;
+  const { data, error } = result;
+
+  return (
+    <section className="mt-8">
+      <h2 className="font-display text-xl font-semibold text-ink">Listings</h2>
+      <div className="mt-4" aria-busy={loading}>
+        {error && !loading ? (
+          <Alert tone="error">{error.message}</Alert>
+        ) : !data ? (
+          <Loading label="Loading listings" />
+        ) : data.items.length === 0 ? (
+          <EmptyState title="Nothing listed right now" />
+        ) : (
+          <>
+            <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`}>
+              <ListingGrid listings={data.items} />
+            </div>
+            <Pagination
+              page={data.page}
+              totalPages={data.totalPages}
+              disabled={loading}
+              onChange={setPage}
+            />
+          </>
+        )}
+      </div>
+    </section>
   );
 }
