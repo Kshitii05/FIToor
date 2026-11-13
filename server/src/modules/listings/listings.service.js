@@ -87,7 +87,7 @@ export function toListing(listing, liked = false, forOwner = false) {
 // ---------------------------------------------------------------------------
 
 /** Checks uploaded files are real JPEG, PNG or WebP images, by content. */
-function readImages(files) {
+export function readImages(files) {
   return (files ?? []).map((file) => {
     const type = detectImageType(file.buffer);
     if (!type) {
@@ -97,11 +97,11 @@ function readImages(files) {
   });
 }
 
-async function storeImages({ imageStorage }, images) {
+export async function storeImages({ imageStorage }, images, folder = IMAGE_FOLDER) {
   const stored = [];
   try {
     for (const image of images) {
-      stored.push(await imageStorage.upload({ ...image, folder: IMAGE_FOLDER }));
+      stored.push(await imageStorage.upload({ ...image, folder }));
     }
   } catch (error) {
     await discardStored({ imageStorage }, stored);
@@ -111,7 +111,7 @@ async function storeImages({ imageStorage }, images) {
 }
 
 /** Best-effort removal of stored files; a failure is logged and never fails the request. */
-async function discardStored({ imageStorage, logger }, stored) {
+export async function discardStored({ imageStorage, logger }, stored) {
   for (const { storageId } of stored) {
     try {
       await imageStorage.remove(storageId);
