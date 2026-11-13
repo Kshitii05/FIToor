@@ -34,6 +34,8 @@ export function emptyListingForm() {
     delivery: false,
     deliveryCharge: '',
     deliveryRadius: '',
+    // { lat, lng, locality } once a spot is chosen.
+    location: null,
   };
 }
 
@@ -59,6 +61,10 @@ export function formFromListing(listing) {
     delivery: listing.delivery !== null,
     deliveryCharge: listing.delivery ? paiseToRupeeInput(listing.delivery.chargePaise) : '',
     deliveryRadius: listing.delivery ? String(listing.delivery.radiusKm) : '',
+    // The seller's own pin (only they receive it) with the area name.
+    location: listing.pin
+      ? { lat: listing.pin.lat, lng: listing.pin.lng, locality: listing.location.locality }
+      : null,
   };
 }
 
@@ -70,12 +76,13 @@ function wholeNumber(text) {
 }
 
 /**
- * Builds the request body for a listing of the given mode.
+ * Builds the request body for a listing of the given mode. A location is required
+ * unless `requireLocation` is false (editing a listing made before locations existed).
  * Returns `{ payload, errors }`; when `errors` has entries the payload is not usable.
  * Only what the browser can judge is checked here (is it a number, is it filled in);
  * ranges and lengths are the server's to decide.
  */
-export function buildListingPayload(form, mode) {
+export function buildListingPayload(form, mode, { requireLocation = true } = {}) {
   const errors = {};
   const payload = {};
 
@@ -121,6 +128,17 @@ export function buildListingPayload(form, mode) {
   }
   if (!form.pickup && !form.delivery) errors.fulfilment = 'Offer delivery, pickup or both';
 
+  if (form.location) {
+    payload.location = {
+      lat: form.location.lat,
+      lng: form.location.lng,
+      locality: form.location.locality.trim(),
+    };
+    if (!payload.location.locality) errors.location = 'Enter the area name';
+  } else if (requireLocation) {
+    errors.location = 'Choose where the item is';
+  }
+
   return { payload, errors };
 }
 
@@ -135,6 +153,7 @@ const SERVER_FIELD = {
 };
 
 function formFieldFor(path) {
+  if (path === 'location' || path.startsWith('location.')) return 'location';
   const packageField = /^packages\.(\d+)\.(durationDays|pricePaise)$/.exec(path);
   if (packageField) {
     return `packages.${packageField[1]}.${packageField[2] === 'durationDays' ? 'days' : 'price'}`;

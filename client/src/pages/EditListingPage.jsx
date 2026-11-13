@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { StatusBadge } from '../components/listings/ListingCard.jsx';
@@ -91,16 +91,18 @@ function Details({ listing, onChange }) {
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const setField = (field, value) => {
+  const setField = useCallback((field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setResult(null);
-  };
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
     setResult(null);
 
-    const { payload, errors: problems } = buildListingPayload(form, listing.mode);
+    const { payload, errors: problems } = buildListingPayload(form, listing.mode, {
+      requireLocation: false,
+    });
     setErrors(problems);
     if (Object.keys(problems).length > 0) {
       setResult({ tone: 'error', message: 'Some details need your attention.' });

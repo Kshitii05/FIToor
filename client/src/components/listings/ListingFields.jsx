@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { LocationPicker } from '../map/LocationPicker.jsx';
 import {
   Alert,
   Button,
@@ -230,6 +232,24 @@ function RentTerms({ form, set, errors }) {
   );
 }
 
+function ItemLocation({ form, set, errors }) {
+  const setLocation = useCallback((value) => set('location', value), [set]);
+  return (
+    <Card>
+      <SectionHeading
+        title="Where is it?"
+        description="Used to show people nearby how far away it is."
+      />
+      <LocationPicker
+        value={form.location}
+        onChange={setLocation}
+        error={errors.location}
+        note="Others see only the area, shown as a circle about 500 m across, never this exact spot."
+      />
+    </Card>
+  );
+}
+
 function Fulfilment({ form, set, errors }) {
   return (
     <Card>
@@ -280,7 +300,8 @@ function Fulfilment({ form, set, errors }) {
 
 /**
  * The detail sections of the listing form, shared by create and edit.
- * `form` is the text state from lib/listingForm.js; `onChange(field, value)` updates it.
+ * `form` is the text state from lib/listingForm.js; `onChange(field, value)` updates it
+ * and should keep the same identity between renders (the map relies on it).
  */
 export function ListingFields({ mode, form, onChange, errors }) {
   return (
@@ -291,6 +312,7 @@ export function ListingFields({ mode, form, onChange, errors }) {
       ) : (
         <RentTerms form={form} set={onChange} errors={errors} />
       )}
+      <ItemLocation form={form} set={onChange} errors={errors} />
       <Fulfilment form={form} set={onChange} errors={errors} />
     </>
   );

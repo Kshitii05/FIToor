@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { ListingFields } from '../components/listings/ListingFields.jsx';
@@ -52,6 +52,11 @@ export default function NewListingPage() {
     };
   }, []);
 
+  const setField = useCallback(
+    (field, value) => setForm((current) => ({ ...current, [field]: value })),
+    [],
+  );
+
   if (!(user.emailVerified && user.phoneVerified)) {
     return (
       <div className="mx-auto w-full max-w-2xl">
@@ -67,8 +72,6 @@ export default function NewListingPage() {
       </div>
     );
   }
-
-  const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   function addPhotos(files) {
     const room = LIMITS.imagesMax - photos.length;
