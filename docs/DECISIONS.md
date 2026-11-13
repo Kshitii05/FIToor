@@ -51,6 +51,13 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I29 | Listing amount limits | Price, rental package price and deposit: ₹1 to ₹5,00,000. Delivery charge: ₹0 to ₹5,000. Late fee per day: ₹0 to ₹10,000. The deposit must be above zero. Sale quantity: 1 to 99, default 1. | PROVISIONAL |
 | I30 | Rental packages | 1 to 6 packages per listing, each 1–30 days, no duplicate durations. The 1/3/7-day presets are suggestions, not requirements. | PROVISIONAL |
 | I31 | Fulfilment, editing and deleting | A listing offers delivery, pickup or both; delivery needs a charge and a radius of 1–50 km. The mode (sale or rent) cannot change after creation. Delete is a soft delete. A removed listing cannot be edited; one under review can. Only fully verified users can create listings (I18). | PROVISIONAL |
+| I32 | Distance in search | The distance filter and "nearest first" sort arrive with locations in Step 4. Until then "Trending Near You" shows trending listings overall. | PROVISIONAL |
+| I33 | Availability filter | A sale listing is available while it has stock. A rent listing counts as available until bookings exist (Step 6) to say otherwise. | PROVISIONAL |
+| I34 | Popularity | Unique views by signed-in people (one per person per listing per day, I15) plus 3 for each like. Views by the seller and by signed-out visitors are not counted. | PROVISIONAL |
+| I35 | Trending | Views plus weighted likes from the last 14 days. | PROVISIONAL |
+| I36 | Budget-Friendly Finds | Listings whose price (or cheapest rental package) is ₹1,000 or less, most popular first. | PROVISIONAL |
+| I37 | "For You" recommendations | Signals: a like counts 3, a view 1, a purchase 5 (once orders exist). Listings score by matching category (×3), brand (×2) and size (×1) of those signals. Own listings and already-liked listings are left out; with no activity, the most popular listings are shown. | PROVISIONAL |
+| I38 | Keyword search | Every word must match; the last word matches by prefix ("kur" finds "kurta"); English word forms are matched ("bags" finds "bag"). No typo correction. At most 8 words. Signed-in users' last 10 keyword searches are kept as suggestions and can be cleared. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -71,6 +78,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-13 — Added I32–I38 while building search and recommendations (Module 6).
 - 2026-11-13 — Added I26–I31 while building listings and inventory (Module 2).
 - 2026-11-12 — Added I18–I25 while building accounts and profiles (Module 1).
 - 2026-11-12 — Rewritten against the final specification. Former open questions are now SPEC sections 12–15; this file keeps only implementation-level defaults.
