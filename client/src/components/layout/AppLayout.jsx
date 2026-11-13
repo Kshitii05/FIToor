@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/authContext.js';
+import { useCart } from '../../cart/cartContext.js';
 import { APP_NAME, APP_TAGLINE } from '../../config/app.js';
 import { SearchBox } from '../search/SearchBox.jsx';
-import { Button, ButtonLink, Loading } from '../ui/index.js';
+import { ButtonLink, Loading } from '../ui/index.js';
 
 function navLinkClass({ isActive }) {
   return `rounded-field px-3 py-2 text-sm font-medium transition-colors ${
@@ -11,10 +12,132 @@ function navLinkClass({ isActive }) {
   }`;
 }
 
-function AccountNav() {
-  const { status, user, logout } = useAuth();
+const CART_ICON = (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
+    <path
+      d="M3.5 4.5h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.1l1.6-6.3H6.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="9.5" cy="19.5" r="1.3" fill="currentColor" />
+    <circle cx="17" cy="19.5" r="1.3" fill="currentColor" />
+  </svg>
+);
+
+function CartLink() {
+  const { count } = useCart();
+  return (
+    <NavLink
+      to="/cart"
+      className={(state) => `relative ${navLinkClass(state)}`}
+      aria-label={count ? `Cart, ${count} ${count === 1 ? 'item' : 'items'}` : 'Cart'}
+      title="Cart"
+    >
+      {CART_ICON}
+      {count ? (
+        <span className="absolute -right-0.5 -top-0.5 flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-xs font-semibold leading-5 text-white">
+          {count}
+        </span>
+      ) : null}
+    </NavLink>
+  );
+}
+
+const MENU_LINKS = [
+  ['/orders', 'My orders'],
+  ['/sales', 'My sales'],
+  ['/my-listings', 'My listings'],
+  ['/liked', 'Liked'],
+  ['/profile', 'Profile'],
+];
+
+/** The account menu: one button, so the header fits on a phone. */
+function AccountMenu() {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const menuId = useId();
+  const wrapper = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (
+        event.type === 'keydown' ? event.key === 'Escape' : !wrapper.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await logout();
+      navigate('/');
+    } finally {
+      setSigningOut(false);
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div ref={wrapper} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((value) => !value)}
+        className="flex min-h-9 max-w-40 items-center gap-1 rounded-field px-2.5 text-sm font-medium text-ink hover:bg-accent-soft"
+      >
+        <span className="truncate">{user.profile.displayName}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-card"
+        >
+          <nav aria-label="Your account">
+            {MENU_LINKS.map(([to, label]) => (
+              <Link
+                key={to}
+                to={to}
+                onClick={() => setOpen(false)}
+                className="block px-4 py-2.5 text-sm text-ink hover:bg-accent-soft"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="border-t border-line">
+            <button
+              type="button"
+              disabled={signingOut}
+              onClick={handleSignOut}
+              className="block w-full px-4 py-2.5 text-left text-sm text-ink hover:bg-accent-soft disabled:opacity-60"
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountNav() {
+  const { status } = useAuth();
 
   if (status === 'loading') return null;
 
@@ -31,51 +154,14 @@ function AccountNav() {
     );
   }
 
-  async function handleSignOut() {
-    setSigningOut(true);
-    try {
-      await logout();
-      navigate('/');
-    } finally {
-      setSigningOut(false);
-    }
-  }
-
   return (
     <>
-      <NavLink to="/liked" className={navLinkClass} aria-label="Liked listings" title="Liked">
-        <span className="hidden sm:inline">Liked</span>
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 sm:hidden">
-          <path
-            d="M12 20.5s-7.5-4.6-9.4-9.2C1.2 7.9 3.4 4.5 6.9 4.5c2 0 3.6 1.1 5.1 3 1.5-1.9 3.1-3 5.1-3 3.5 0 5.7 3.4 4.3 6.8-1.9 4.6-9.4 9.2-9.4 9.2Z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </NavLink>
-      <NavLink to="/my-listings" className={navLinkClass}>
-        <span className="hidden sm:inline">My listings</span>
-        <span className="sm:hidden">Listings</span>
-      </NavLink>
-      <NavLink to="/profile" className={navLinkClass}>
-        <span className="hidden sm:inline">{user.profile.displayName}</span>
-        <span className="sm:hidden">Profile</span>
-      </NavLink>
+      <CartLink />
       <ButtonLink to="/listings/new" size="sm">
         <span className="hidden sm:inline">List an item</span>
         <span className="sm:hidden">List</span>
       </ButtonLink>
-      {/*
-        On small screens signing out is on the profile page instead. The wrapper is
-        what hides it: the button's own display style would override "hidden".
-      */}
-      <span className="hidden sm:inline-flex">
-        <Button variant="secondary" size="sm" loading={signingOut} onClick={handleSignOut}>
-          Sign out
-        </Button>
-      </span>
+      <AccountMenu />
     </>
   );
 }

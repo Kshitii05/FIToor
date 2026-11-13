@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import 'leaflet/dist/leaflet.css';
 import { AuthProvider } from './auth/AuthProvider.jsx';
+import { CartProvider } from './cart/CartProvider.jsx';
 import { OriginProvider } from './location/OriginProvider.jsx';
 import './index.css';
 
@@ -12,7 +13,9 @@ createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <OriginProvider>
-          <App />
+          <CartProvider>
+            <App />
+          </CartProvider>
         </OriginProvider>
       </AuthProvider>
     </BrowserRouter>
