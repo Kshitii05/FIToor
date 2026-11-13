@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
+import { SavedPlaces } from '../components/map/SavedPlaces.jsx';
 import { TextLink } from '../components/layout/AppLayout.jsx';
 import {
   Alert,
@@ -288,7 +290,17 @@ function DeleteAccount() {
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { hash } = useLocation();
   const allVerified = user.emailVerified && user.phoneVerified;
+
+  // Links like /profile#places jump to that section once the page has drawn.
+  useEffect(() => {
+    if (!hash) return undefined;
+    const timer = setTimeout(() => {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [hash]);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -304,6 +316,7 @@ export default function ProfilePage() {
       <div className="mt-6 space-y-5">
         <ProfileDetails />
         <AccountDetails />
+        <SavedPlaces />
         <NotificationPreferences />
         <SignOut />
         <DeleteAccount />
