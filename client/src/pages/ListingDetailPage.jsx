@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { LikeButton } from '../components/listings/LikeButton.jsx';
+import { AddToCart } from '../components/orders/AddToCart.jsx';
 import { StatusBadge } from '../components/listings/ListingCard.jsx';
 import { Alert, Button, ButtonLink, Card, Loading } from '../components/ui/index.js';
 import { api } from '../lib/api.js';
@@ -349,6 +350,8 @@ export default function ListingDetailPage() {
           {isOwner ? <OwnerControls listing={listing} onChange={setListing} /> : null}
 
           {listing.sale ? <SalePricing sale={listing.sale} /> : <RentPricing rent={listing.rent} />}
+
+          {isOwner ? null : <AddToCart key={listing.id} listing={listing} />}
 
           <Facts listing={listing} />
 
