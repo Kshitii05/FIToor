@@ -123,10 +123,10 @@ export function createMyListingsRouter(deps) {
 export function createSellerListingsRouter(deps) {
   const router = Router();
 
-  router.get('/:id/listings', async (req, res) => {
+  router.get('/:id/listings', deps.optionalAuth, async (req, res) => {
     const { id } = sellerIdParamsSchema.parse(req.params);
     const query = sellerListingsQuerySchema.parse(req.query);
-    res.json(await listSellerListings(deps, id, query));
+    res.json(await listSellerListings(deps, id, query, req.auth?.userId ?? null));
   });
 
   return router;

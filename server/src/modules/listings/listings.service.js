@@ -2,17 +2,18 @@ import { LISTING_IMAGES_MAX, LISTING_IMAGES_MIN } from '../../config/policy.js';
 import { AppError } from '../../lib/errors.js';
 import { detectImageType } from '../../lib/imageType.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
+import { likedListingIds, recordView } from '../discovery/activity.service.js';
 
 const IMAGE_FOLDER = 'listings';
 
-const listingInclude = {
+export const listingInclude = {
   images: { orderBy: { position: 'asc' } },
   packages: { orderBy: { durationDays: 'asc' } },
   seller: { select: { id: true, status: true, profile: true } },
 };
 
 // What everyone may see: live listings of sellers whose accounts are active.
-const PUBLICLY_VISIBLE = { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } };
+export const PUBLICLY_VISIBLE = { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } };
 
 // ---------------------------------------------------------------------------
 // Response shape
@@ -20,9 +21,10 @@ const PUBLICLY_VISIBLE = { deletedAt: null, status: 'ACTIVE', seller: { status: 
 
 /**
  * Built field by field so nothing private (seller contact details, storage
- * identifiers) can leak into a response.
+ * identifiers) can leak into a response. `liked` is whether the person asking
+ * has liked it.
  */
-function toListing(listing) {
+export function toListing(listing, liked = false) {
   const forSale = listing.mode === 'SALE';
   return {
     id: listing.id,
@@ -53,6 +55,8 @@ function toListing(listing) {
       ? { chargePaise: listing.deliveryChargePaise, radiusKm: listing.deliveryRadiusKm }
       : null,
     pickup: listing.offersPickup,
+    likeCount: listing.likeCount,
+    liked,
     images: listing.images.map((image) => ({
       id: image.id,
       url: image.url,
@@ -151,6 +155,11 @@ function recordEvent(tx, clock, { listingId, actorUserId, action, fromStatus, to
 // Create, read, update
 // ---------------------------------------------------------------------------
 
+/** The price shown for a listing: its sale price, or its cheapest rental package. */
+function headlinePrice({ pricePaise, packages }) {
+  return pricePaise ?? Math.min(...packages.map((option) => option.pricePaise));
+}
+
 function fulfilmentColumns({ delivery, pickup }) {
   return {
     offersDelivery: delivery !== null,
@@ -181,6 +190,7 @@ export async function createListing(deps, sellerId, input, files) {
           mode,
           sellerId,
           createdAt: now,
+          headlinePricePaise: headlinePrice({ pricePaise: fields.pricePaise, packages }),
           packages: packages ? { create: packages } : undefined,
           images: {
             create: stored.map(({ url, storageId }, position) => ({
@@ -210,12 +220,18 @@ export async function createListing(deps, sellerId, input, files) {
 }
 
 /** A listing as seen by `viewerId` (null for a visitor). Owners see their own in any state. */
-export async function getListing({ db }, id, viewerId) {
+export async function getListing({ db, clock }, id, viewerId) {
   const listing = await loadListing(db, id);
   const isOwner = viewerId !== null && listing.sellerId === viewerId;
   const isPublic = listing.status === 'ACTIVE' && listing.seller.status === 'ACTIVE';
   if (!isOwner && !isPublic) throw AppError.notFound('Listing not found');
-  return toListing(listing);
+
+  if (viewerId === null || isOwner) return toListing(listing);
+
+  // Someone else, signed in, looking at a live listing: that is a view.
+  await recordView({ db, clock }, { userId: viewerId, listingId: id });
+  const liked = await likedListingIds(db, viewerId, [id]);
+  return toListing(listing, liked.has(id));
 }
 
 /**
@@ -228,6 +244,9 @@ export async function updateListing({ db }, id, userId, parseChanges) {
 
   const { delivery, pickup, packages, ...fields } = parseChanges(listing.mode);
   const data = { ...fields };
+  if (fields.pricePaise !== undefined || packages) {
+    data.headlinePricePaise = headlinePrice({ pricePaise: fields.pricePaise, packages });
+  }
 
   if (delivery !== undefined || pickup !== undefined) {
     const next = {
@@ -325,7 +344,17 @@ export async function deleteListing({ db, clock }, id, userId) {
 // Lists
 // ---------------------------------------------------------------------------
 
-async function listListings(db, where, query) {
+/** Turns listing rows into responses, marking the ones `viewerId` has liked. */
+export async function toListings(db, rows, viewerId = null) {
+  const liked = await likedListingIds(
+    db,
+    viewerId,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => toListing(row, liked.has(row.id)));
+}
+
+async function listListings(db, where, query, viewerId = null) {
   const [rows, total] = await Promise.all([
     db.listing.findMany({
       where,
@@ -335,7 +364,7 @@ async function listListings(db, where, query) {
     }),
     db.listing.count({ where }),
   ]);
-  return paged(rows.map(toListing), total, query);
+  return paged(await toListings(db, rows, viewerId), total, query);
 }
 
 export function listOwnListings({ db }, userId, query) {
@@ -343,9 +372,9 @@ export function listOwnListings({ db }, userId, query) {
   return listListings(db, { sellerId: userId, deletedAt: null, status, mode, category }, query);
 }
 
-export function listSellerListings({ db }, sellerId, query) {
+export function listSellerListings({ db }, sellerId, query, viewerId = null) {
   const { mode, category } = query;
-  return listListings(db, { ...PUBLICLY_VISIBLE, sellerId, mode, category }, query);
+  return listListings(db, { ...PUBLICLY_VISIBLE, sellerId, mode, category }, query, viewerId);
 }
 
 // ---------------------------------------------------------------------------

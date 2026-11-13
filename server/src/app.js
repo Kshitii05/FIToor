@@ -14,6 +14,12 @@ import { createOtpSender } from './lib/otpSender.js';
 import { createLimiters } from './lib/rateLimit.js';
 import { createRedisRateLimitStore } from './lib/redis.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
+import {
+  createBrowseRouter,
+  createHomeRouter,
+  createMyDiscoveryRouter,
+  createSearchRouter,
+} from './modules/discovery/discovery.routes.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
 import {
   createListingsRouter,
@@ -71,8 +77,12 @@ export function createApp({
   const api = express.Router();
   api.use('/health', createHealthRouter(deps));
   api.use('/auth', createAuthRouter(deps));
+  api.use('/home', createHomeRouter(deps));
+  api.use('/search', createSearchRouter(deps));
+  api.use('/listings', createBrowseRouter(deps));
   api.use('/listings', createListingsRouter(deps));
   api.use('/me/listings', createMyListingsRouter(deps));
+  api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));
   api.use('/users', createUsersRouter(deps));
