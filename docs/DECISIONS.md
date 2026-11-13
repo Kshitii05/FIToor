@@ -66,6 +66,18 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I44 | Delivery radius in search | "Delivers to you" means the listing offers delivery and its public point is within the seller's delivery radius of the origin. Optional filter for these only. Checked again at checkout (Step 5). | PROVISIONAL |
 | I45 | Trending Near You | Within 10 km of the origin when there is one; across all listings otherwise. | PROVISIONAL |
 | I46 | Allowed area and map tiles | Coordinates must be inside 6–37.5° N, 68–97.5° E. Maps use OpenStreetMap's standard tiles with their credit line; a production tile provider is a launch check. | PROVISIONAL |
+| I47 | Delivery address | Entered at checkout with a map pin; up to 5 saved, private to the owner. A copy is kept on the order. Delivery is refused when the pin is outside any item's delivery radius (measured from the listing's public point). | PROVISIONAL |
+| I48 | What each side sees after payment | The seller sees the buyer's name, phone and delivery address; a pickup buyer sees the exact pickup pin and the seller's phone. Phone numbers and pickup pins are shown only while the order is in progress, not after it is completed, cancelled or refunded. | PROVISIONAL |
+| I49 | Seller cancellation | Allowed before dispatch (or before pickup) with a recorded reason; the buyer gets a full refund and the item goes back on sale. | PROVISIONAL |
+| I50 | Dispatch extension | Once per order, the seller may ask for up to 3 more business days. It applies only if the buyer accepts; declining or not answering keeps the original deadline. Dispatch deadlines apply to delivery orders only. | PROVISIONAL |
+| I51 | Late or duplicate payments | A payment after the 15-minute reservation keeps the order if the stock is still free; otherwise it is refunded in full automatically. A second payment for an already paid checkout is refunded in full. | PROVISIONAL |
+| I52 | Issue refunds | The admin chooses a full refund (everything not yet refunded, delivery included), a partial refund (items only, less than what is left) or rejection. No return of the item is required in the MVP. Each needs a written reason. | PROVISIONAL |
+| I53 | Admin in this step | A `role` column (USER / ADMIN) and admin-only endpoints to verify delivery, cancel with refund, resolve issues and reset a handover code. Every action needs a reason and is written to the append-only admin audit log. `npm run make-admin` gives an account the role. The dashboard comes in Step 10. | PROVISIONAL |
+| I54 | Order notifications | Emails for: order placed, dispatch reminder (24 h before), dispatch overdue, extension request, dispatched, delivery reported, sent to review, received, issue opened, cancelled, refunded, completed. In-app notifications come in Step 9. | PROVISIONAL |
+| I55 | Payouts | This step only marks orders payout-eligible (COMPLETED: delivered, 7-day window over, nothing open). Payout batches come later. The delivery charge is part of the seller payable, since the seller arranges delivery. | PROVISIONAL |
+| I56 | Cart | Up to 20 items; quantity no more than stock; sale listings only; not your own. Any signed-in person can use a cart; checkout needs a verified account (I18). | PROVISIONAL |
+| I57 | Commission rounding and gateway fees | Commission is 10% of the items subtotal per seller order, rounded to the nearest paisa (halves up). Refunds recalculate it on what remains, so partial refunds add up exactly. Gateway fees are recorded as a platform cost and never charged to sellers. | PROVISIONAL |
+| I58 | Buyer cancellation and pickup codes | The buyer may cancel any time before dispatch (or before pickup), as the spec allows. Pickup completes only with the buyer's 6-digit handover code; 5 wrong tries lock it until an admin resets it. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -87,6 +99,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-13 — Added I47–I58 while building cart, checkout, payments and orders (Module 3).
 - 2026-11-13 — Added I39–I46 while building location discovery (Module 5).
 - 2026-11-13 — Added I32–I38 while building search and recommendations (Module 6).
 - 2026-11-13 — Added I26–I31 while building listings and inventory (Module 2).
