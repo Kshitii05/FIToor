@@ -15,6 +15,7 @@ import { db } from '../src/lib/db.js';
 import { createImageStorage } from '../src/lib/imageStorage.js';
 import { hashPassword } from '../src/lib/password.js';
 import { POPULARITY_LIKE_WEIGHT } from '../src/config/policy.js';
+import { publicPoint } from '../src/lib/geo.js';
 
 if (env.NODE_ENV === 'production') {
   console.error('The seed script is for development only.');
@@ -289,20 +290,29 @@ const FIT_NOTES = [
   'Happy to share more photos on request.',
 ];
 
+// Demo sellers: name, area, and the area's centre (approximate) in Bengaluru.
 const SELLER_PROFILES = [
-  ['Ananya Rao', 'Indiranagar'],
-  ['Rohan Mehta', 'Koramangala'],
-  ['Priya Nair', 'HSR Layout'],
-  ['Arjun Iyer', 'Jayanagar'],
-  ['Sneha Kulkarni', 'Whitefield'],
-  ['Kabir Singh', 'Malleshwaram'],
-  ['Meera Pillai', 'JP Nagar'],
-  ['Aditya Sharma', 'Banashankari'],
-  ['Ishita Das', 'Frazer Town'],
-  ['Vikram Reddy', 'Marathahalli'],
-  ['Tanvi Joshi', 'Basavanagudi'],
-  ['Farhan Khan', 'Richmond Town'],
+  ['Ananya Rao', 'Indiranagar', 12.9784, 77.6408],
+  ['Rohan Mehta', 'Koramangala', 12.9352, 77.6245],
+  ['Priya Nair', 'HSR Layout', 12.9116, 77.6474],
+  ['Arjun Iyer', 'Jayanagar', 12.925, 77.5938],
+  ['Sneha Kulkarni', 'Whitefield', 12.9698, 77.75],
+  ['Kabir Singh', 'Malleshwaram', 13.0035, 77.5647],
+  ['Meera Pillai', 'JP Nagar', 12.9077, 77.5851],
+  ['Aditya Sharma', 'Banashankari', 12.9255, 77.5468],
+  ['Ishita Das', 'Frazer Town', 12.9984, 77.615],
+  ['Vikram Reddy', 'Marathahalli', 12.9569, 77.7011],
+  ['Tanvi Joshi', 'Basavanagudi', 12.9422, 77.5738],
+  ['Farhan Khan', 'Richmond Town', 12.9604, 77.6033],
 ];
+
+/** A spot within about 1.2 km of an area centre, for a listing pin. */
+function pinNear([, locality, lat, lng]) {
+  const offset = () => (random() - 0.5) * 0.022;
+  const pin = { lat: lat + offset(), lng: lng + offset() };
+  const shown = publicPoint(pin);
+  return { pinLat: pin.lat, pinLng: pin.lng, publicLat: shown.lat, publicLng: shown.lng, locality };
+}
 
 function makeListing(index, now) {
   const rent = chance(0.3);
@@ -424,6 +434,19 @@ async function createUsers(kind, count, passwordHash, now) {
             },
           },
           preferences: { create: {} },
+          locations:
+            kind === 'seller'
+              ? {
+                  create: {
+                    label: 'Home',
+                    locality,
+                    lat: SELLER_PROFILES[n - 1][2],
+                    lng: SELLER_PROFILES[n - 1][3],
+                    isDefault: true,
+                    createdAt: now,
+                  },
+                }
+              : undefined,
         },
       }),
     );
@@ -447,7 +470,14 @@ async function main() {
   const listings = [];
   for (let i = 0; i < LISTINGS; i += 1) {
     const seller = sellers[i % SELLERS];
-    const { packages, imageCount = between(1, 3), ...fields } = makeListing(i, now.getTime());
+    const {
+      packages,
+      imageCount = between(1, 3),
+      ...fields
+    } = {
+      ...makeListing(i, now.getTime()),
+      ...pinNear(SELLER_PROFILES[i % SELLERS]),
+    };
 
     const files = [];
     for (let position = 0; position < imageCount; position += 1) {

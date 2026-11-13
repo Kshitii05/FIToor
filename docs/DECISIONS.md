@@ -58,6 +58,14 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I36 | Budget-Friendly Finds | Listings whose price (or cheapest rental package) is ₹1,000 or less, most popular first. | PROVISIONAL |
 | I37 | "For You" recommendations | Signals: a like counts 3, a view 1, a purchase 5 (once orders exist). Listings score by matching category (×3), brand (×2) and size (×1) of those signals. Own listings and already-liked listings are left out; with no activity, the most popular listings are shown. | PROVISIONAL |
 | I38 | Keyword search | Every word must match; the last word matches by prefix ("kur" finds "kurta"); English word forms are matched ("bags" finds "bag"). No typo correction. At most 8 words. Signed-in users' last 10 keyword searches are kept as suggestions and can be cleared. | PROVISIONAL |
+| I39 | Place search | City, area and PIN code search, and area names for a map point, use OpenStreetMap's Nominatim service through our server: India only, answers cached 30 days, at most one request per second, positions rounded to about 100 m before sending. What a user types is sent to OpenStreetMap; the privacy notice must say so. A paid provider may be needed at scale (launch check). | PROVISIONAL |
+| I40 | Listing location | The seller places a pin (map, current position or place search) with an area name. Required for new listings. Listings without one still appear in searches without distance. | PROVISIONAL |
+| I41 | What the public sees of a location | Only the centre of the ~500 m grid square the pin is in (I6), with the area name. Distances are measured from that centre and shown rounded up to the next 0.5 km (at least 0.5 km). The exact pin is shown only to the seller; sharing it with the other party of a confirmed order or booking comes with Steps 5 and 6. | PROVISIONAL |
+| I42 | Where distances are measured from | A device position (rounded to about 100 m, never stored, kept out of shareable links), else a saved location named in the request, else the person's default saved location. Without any of these there are no distances, and the distance filters are refused. | PROVISIONAL |
+| I43 | Saved locations | Up to 5 per person, each with a name and an area; private to the owner. The first one saved is the default; exactly one is the default; removing it passes the default to the oldest remaining one. | PROVISIONAL |
+| I44 | Delivery radius in search | "Delivers to you" means the listing offers delivery and its public point is within the seller's delivery radius of the origin. Optional filter for these only. Checked again at checkout (Step 5). | PROVISIONAL |
+| I45 | Trending Near You | Within 10 km of the origin when there is one; across all listings otherwise. | PROVISIONAL |
+| I46 | Allowed area and map tiles | Coordinates must be inside 6–37.5° N, 68–97.5° E. Maps use OpenStreetMap's standard tiles with their credit line; a production tile provider is a launch check. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -75,9 +83,11 @@ Rules while these are open:
 | Legal / tax review | | | |
 | Bank payout procedure | | | |
 | Hosting: PostGIS, Redis, backups | | | |
+| OpenStreetMap place search and map tiles: usage policy, provider at scale (I39, I46) | | | |
 
 ## Change log
 
+- 2026-11-13 — Added I39–I46 while building location discovery (Module 5).
 - 2026-11-13 — Added I32–I38 while building search and recommendations (Module 6).
 - 2026-11-13 — Added I26–I31 while building listings and inventory (Module 2).
 - 2026-11-12 — Added I18–I25 while building accounts and profiles (Module 1).
