@@ -6,21 +6,7 @@ import { Alert, Button, ButtonLink, Card, Loading } from '../components/ui/index
 import { APP_NAME } from '../config/app.js';
 import { api } from '../lib/api.js';
 import { formatPaise } from '../lib/money.js';
-
-const RAZORPAY_SCRIPT = 'https://checkout.razorpay.com/v1/checkout.js';
-
-/** Loads Razorpay's checkout script once, only when a real (test-mode) payment is made. */
-function loadRazorpay() {
-  if (window.Razorpay) return Promise.resolve(window.Razorpay);
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = RAZORPAY_SCRIPT;
-    script.onload = () => resolve(window.Razorpay);
-    script.onerror = () =>
-      reject(new Error('The payment window could not be loaded. Check your connection.'));
-    document.body.append(script);
-  });
-}
+import { loadRazorpay } from '../lib/razorpay.js';
 
 /** Seconds left until `iso`, counting down once a second. */
 function useSecondsLeft(iso) {

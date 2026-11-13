@@ -14,9 +14,12 @@ import MyListingsPage from './pages/MyListingsPage.jsx';
 import NewListingPage from './pages/NewListingPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import OrdersListPage from './pages/OrdersListPage.jsx';
+import OwnerBookingPage from './pages/OwnerBookingPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PublicProfilePage from './pages/PublicProfilePage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
+import RentalsListPage from './pages/RentalsListPage.jsx';
+import RenterBookingPage from './pages/RenterBookingPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import SellerOrderPage from './pages/SellerOrderPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
@@ -49,6 +52,10 @@ export default function App() {
           <Route path="orders/:id" element={<BuyerOrderPage />} />
           <Route path="sales" element={<OrdersListPage key="seller" side="seller" />} />
           <Route path="sales/:id" element={<SellerOrderPage />} />
+          <Route path="rentals" element={<RentalsListPage key="renter" side="renter" />} />
+          <Route path="rentals/:id" element={<RenterBookingPage />} />
+          <Route path="rented-out" element={<RentalsListPage key="owner" side="owner" />} />
+          <Route path="rented-out/:id" element={<OwnerBookingPage />} />
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="listings/:id/edit" element={<EditListingPage />} />
         </Route>

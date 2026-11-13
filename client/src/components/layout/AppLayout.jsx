@@ -49,6 +49,8 @@ function CartLink() {
 const MENU_LINKS = [
   ['/orders', 'My orders'],
   ['/sales', 'My sales'],
+  ['/rentals', 'My rentals'],
+  ['/rented-out', 'Rented out'],
   ['/my-listings', 'My listings'],
   ['/liked', 'Liked'],
   ['/profile', 'Profile'],
