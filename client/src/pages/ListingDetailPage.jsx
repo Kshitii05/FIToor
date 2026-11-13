@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
+import { LikeButton } from '../components/listings/LikeButton.jsx';
 import { StatusBadge } from '../components/listings/ListingCard.jsx';
 import { Alert, Button, ButtonLink, Card, Loading } from '../components/ui/index.js';
 import { api } from '../lib/api.js';
@@ -334,6 +335,11 @@ export default function ListingDetailPage() {
             <h1 className="mt-2 break-words font-display text-3xl font-semibold tracking-tight text-ink">
               {listing.title}
             </h1>
+            {isOwner ? null : (
+              <div className="mt-4">
+                <LikeButton key={listing.id} listing={listing} />
+              </div>
+            )}
           </header>
 
           {isOwner ? <OwnerControls listing={listing} onChange={setListing} /> : null}
