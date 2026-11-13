@@ -73,3 +73,54 @@ export async function createListing(ctx, account, details = saleDetails(), image
   }
   return res.body.listing;
 }
+
+let inserted = 0;
+
+/**
+ * Puts a listing straight into the database, for tests that need many listings and
+ * are not about creating them. `seller` is an account from registerUser.
+ * Pass `mode: 'RENT'` with `packages` for a rental; `pricePaise` sets a sale price.
+ */
+export async function insertListing(seller, overrides = {}) {
+  inserted += 1;
+  const { mode = 'SALE', packages, images = 1, ...fields } = overrides;
+  const { db } = await import('./helpers.js');
+  const rentPackages = packages ?? [{ durationDays: 3, pricePaise: 150000 }];
+  const terms =
+    mode === 'SALE'
+      ? { pricePaise: 120000, quantity: 1 }
+      : { depositPaise: 500000, lateFeePerDayPaise: 20000 };
+  const data = {
+    mode,
+    title: `Listing number ${inserted}`,
+    description: 'A plain description used by tests.',
+    category: 'WESTERN_WEAR',
+    condition: 'GOOD',
+    brand: 'Generic',
+    size: 'M',
+    colour: 'Black',
+    offersDelivery: false,
+    offersPickup: true,
+    createdAt: new Date('2026-11-01T00:00:00.000Z'),
+    ...terms,
+    ...fields,
+  };
+  data.headlinePricePaise =
+    mode === 'SALE' ? data.pricePaise : Math.min(...rentPackages.map((p) => p.pricePaise));
+
+  return db.listing.create({
+    data: {
+      ...data,
+      sellerId: seller.user.id,
+      packages: mode === 'RENT' ? { create: rentPackages } : undefined,
+      images: {
+        create: Array.from({ length: images }, (_, position) => ({
+          url: `https://images.test/inserted-${inserted}-${position}.png`,
+          storageId: `inserted-${inserted}-${position}`,
+          position,
+          createdAt: data.createdAt,
+        })),
+      },
+    },
+  });
+}

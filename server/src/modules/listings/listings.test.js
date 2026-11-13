@@ -261,6 +261,7 @@ describe('sale or rent, never both', () => {
       colour: 'Black',
       offersDelivery: false,
       offersPickup: true,
+      headlinePricePaise: 100000,
       createdAt: new Date(),
     };
 
