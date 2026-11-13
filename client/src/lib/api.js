@@ -50,8 +50,10 @@ export function setSessionLostHandler(handler) {
 }
 
 async function send(path, { method = 'GET', body, auth = true } = {}) {
+  // A FormData body (file uploads) is sent as is; the browser sets its content type.
+  const isForm = body instanceof FormData;
   const headers = {};
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   let response;
@@ -59,7 +61,7 @@ async function send(path, { method = 'GET', body, auth = true } = {}) {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || isForm ? body : JSON.stringify(body),
       credentials: 'include',
     });
   } catch {
