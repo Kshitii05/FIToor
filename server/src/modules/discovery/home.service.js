@@ -5,12 +5,14 @@ import {
   POPULARITY_LIKE_WEIGHT,
   RECOMMENDATION_MATCH_WEIGHTS,
   RECOMMENDATION_SIGNAL_WEIGHTS,
+  TRENDING_NEAR_RADIUS_KM,
   TRENDING_WINDOW_DAYS,
 } from '../../config/policy.js';
 import { addDays, businessDate } from '../../lib/clock.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
 import { listingInclude, PUBLICLY_VISIBLE, toListing } from '../listings/listings.service.js';
-import { AVAILABLE, listingsInOrder, VISIBLE } from './search.service.js';
+import { describeOrigin, resolveOrigin, withDistances } from '../locations/locations.service.js';
+import { AVAILABLE, listingsInOrder, VISIBLE, within } from './search.service.js';
 
 // The home page sections (SPEC Module 6). Every section draws only from listings
 // that are live, belong to active sellers, and can be bought or rented right now.
@@ -20,8 +22,14 @@ const ELIGIBLE = Prisma.sql`FROM listings l JOIN users u ON u.id = l.seller_id
 
 const ids = (rows) => rows.map((row) => row.id);
 
-/** Most activity (views plus weighted likes) over the recent window. */
-function trending(db, now) {
+/**
+ * Most activity (views plus weighted likes) over the recent window; within reach of
+ * the origin when there is one, everywhere otherwise.
+ */
+function trending(db, now, origin) {
+  const nearby = origin
+    ? Prisma.sql`AND ${within(origin, TRENDING_NEAR_RADIUS_KM * 1000)}`
+    : Prisma.empty;
   const since = addDays(now, -TRENDING_WINDOW_DAYS);
   return db.$queryRaw`
     SELECT l.id
@@ -35,7 +43,7 @@ function trending(db, now) {
       SELECT listing_id, count(*) AS likes FROM listing_likes
       WHERE created_at >= ${since} GROUP BY listing_id
     ) k ON k.listing_id = l.id
-    WHERE ${VISIBLE} AND ${AVAILABLE}
+    WHERE ${VISIBLE} AND ${AVAILABLE} ${nearby}
     ORDER BY coalesce(v.views, 0) + ${POPULARITY_LIKE_WEIGHT} * coalesce(k.likes, 0) DESC,
       l.created_at DESC, l.id
     LIMIT ${HOME_SECTION_SIZE}`;
@@ -107,11 +115,15 @@ function forYou(db, userId) {
     LIMIT ${HOME_SECTION_SIZE}`;
 }
 
-/** The home page: named sections of listings. "For You" appears only when signed in. */
-export async function homeSections({ db, clock }, viewerId = null) {
+/**
+ * The home page: named sections of listings. "For You" appears only when signed
+ * in. With an origin (see resolveOrigin) trending is limited to nearby listings and
+ * every listing carries its distance.
+ */
+export async function homeSections({ db, clock }, viewerId = null, query = {}) {
+  const origin = await resolveOrigin({ db }, query, viewerId);
   const sources = [
-    // Becomes location-aware when listings have locations.
-    { key: 'trending', title: 'Trending Near You', rows: trending(db, clock.now()) },
+    { key: 'trending', title: 'Trending Near You', rows: trending(db, clock.now(), origin) },
     { key: 'recent', title: 'Recently Listed', rows: recentlyListed(db) },
     { key: 'budget', title: 'Budget-Friendly Finds', rows: budgetFriendly(db) },
     { key: 'rent', title: 'Rent for an Occasion', rows: rentForAnOccasion(db) },
@@ -122,10 +134,10 @@ export async function homeSections({ db, clock }, viewerId = null) {
     sources.map(async ({ key, title, rows }) => ({
       key,
       title,
-      items: await listingsInOrder(db, ids(await rows), viewerId),
+      items: await withDistances(db, await listingsInOrder(db, ids(await rows), viewerId), origin),
     })),
   );
-  return { sections };
+  return { origin: describeOrigin(origin), sections };
 }
 
 /** The listings a user has liked that can still be seen, most recently liked first. */

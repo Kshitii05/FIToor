@@ -30,6 +30,7 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
   const emails = [];
   const texts = [];
   const imageStorage = createMemoryImageStorage();
+  const placeLookup = createFakePlaceLookup();
 
   const app = createApp({
     clock,
@@ -37,6 +38,7 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
     emailSender: { send: async (message) => void emails.push(message) },
     otpSender: { send: async (message) => void texts.push(message) },
     imageStorage,
+    placeLookup,
     ...appOptions,
   });
 
@@ -48,6 +50,7 @@ export function createTestContext({ start = '2026-11-13T06:30:00.000Z', ...appOp
     emails,
     texts,
     imageStorage,
+    placeLookup,
     lastEmailTo,
     /** The most recent code emailed to an address. */
     emailCode: (to) => lastEmailTo(to)?.text.match(/\b\d{6}\b/)?.[0],
@@ -73,6 +76,31 @@ export function createMemoryImageStorage() {
     async remove(storageId) {
       stored.delete(storageId);
       removed.push(storageId);
+    },
+  };
+}
+
+/** Stands in for the place service, so tests never call OpenStreetMap. */
+export function createFakePlaceLookup() {
+  const calls = [];
+  return {
+    calls,
+    async search(text) {
+      calls.push({ search: text });
+      return [
+        {
+          locality: 'Indiranagar',
+          city: 'Bengaluru',
+          pincode: '560038',
+          label: 'Indiranagar, Bengaluru',
+          lat: 12.9784,
+          lng: 77.6408,
+        },
+      ];
+    },
+    async reverse(point) {
+      calls.push({ reverse: point });
+      return { locality: 'Indiranagar', city: 'Bengaluru', label: 'Indiranagar, Bengaluru' };
     },
   };
 }

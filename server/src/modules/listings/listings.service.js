@@ -1,6 +1,7 @@
 import { LISTING_IMAGES_MAX, LISTING_IMAGES_MIN } from '../../config/policy.js';
 import { AppError } from '../../lib/errors.js';
 import { detectImageType } from '../../lib/imageType.js';
+import { publicPoint } from '../../lib/geo.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
 import { likedListingIds, recordView } from '../discovery/activity.service.js';
 
@@ -21,10 +22,10 @@ export const PUBLICLY_VISIBLE = { deletedAt: null, status: 'ACTIVE', seller: { s
 
 /**
  * Built field by field so nothing private (seller contact details, storage
- * identifiers) can leak into a response. `liked` is whether the person asking
- * has liked it.
+ * identifiers, the exact pin) can leak into a response. `liked` is whether the
+ * person asking has liked it. `forOwner` adds what only the seller may see.
  */
-export function toListing(listing, liked = false) {
+export function toListing(listing, liked = false, forOwner = false) {
   const forSale = listing.mode === 'SALE';
   return {
     id: listing.id,
@@ -55,6 +56,14 @@ export function toListing(listing, liked = false) {
       ? { chargePaise: listing.deliveryChargePaise, radiusKm: listing.deliveryRadiusKm }
       : null,
     pickup: listing.offersPickup,
+    // Approximate: the centre of a ~500 m square, never the exact spot.
+    location:
+      listing.publicLat === null
+        ? null
+        : { lat: listing.publicLat, lng: listing.publicLng, locality: listing.locality },
+    ...(forOwner
+      ? { pin: listing.pinLat === null ? null : { lat: listing.pinLat, lng: listing.pinLng } }
+      : {}),
     likeCount: listing.likeCount,
     liked,
     images: listing.images.map((image) => ({
@@ -160,6 +169,12 @@ function headlinePrice({ pricePaise, packages }) {
   return pricePaise ?? Math.min(...packages.map((option) => option.pricePaise));
 }
 
+/** The stored form of a location: the private pin and its public grid point. */
+function locationColumns({ lat, lng, locality }) {
+  const shown = publicPoint({ lat, lng });
+  return { pinLat: lat, pinLng: lng, publicLat: shown.lat, publicLng: shown.lng, locality };
+}
+
 function fulfilmentColumns({ delivery, pickup }) {
   return {
     offersDelivery: delivery !== null,
@@ -179,7 +194,7 @@ export async function createListing(deps, sellerId, input, files) {
 
   const stored = await storeImages(deps, images);
   const now = clock.now();
-  const { mode, delivery, pickup, packages, ...fields } = input;
+  const { mode, delivery, pickup, packages, location, ...fields } = input;
 
   try {
     const listing = await db.$transaction(async (tx) => {
@@ -187,6 +202,7 @@ export async function createListing(deps, sellerId, input, files) {
         data: {
           ...fields,
           ...fulfilmentColumns({ delivery, pickup }),
+          ...locationColumns(location),
           mode,
           sellerId,
           createdAt: now,
@@ -212,7 +228,7 @@ export async function createListing(deps, sellerId, input, files) {
       });
       return created;
     });
-    return toListing(listing);
+    return toListing(listing, false, true);
   } catch (error) {
     await discardStored(deps, stored);
     throw error;
@@ -226,7 +242,8 @@ export async function getListing({ db, clock }, id, viewerId) {
   const isPublic = listing.status === 'ACTIVE' && listing.seller.status === 'ACTIVE';
   if (!isOwner && !isPublic) throw AppError.notFound('Listing not found');
 
-  if (viewerId === null || isOwner) return toListing(listing);
+  if (isOwner) return toListing(listing, false, true);
+  if (viewerId === null) return toListing(listing);
 
   // Someone else, signed in, looking at a live listing: that is a view.
   await recordView({ db, clock }, { userId: viewerId, listingId: id });
@@ -242,8 +259,8 @@ export async function updateListing({ db }, id, userId, parseChanges) {
   const listing = await loadOwnListing(db, id, userId);
   assertEditable(listing);
 
-  const { delivery, pickup, packages, ...fields } = parseChanges(listing.mode);
-  const data = { ...fields };
+  const { delivery, pickup, packages, location, ...fields } = parseChanges(listing.mode);
+  const data = { ...fields, ...(location ? locationColumns(location) : {}) };
   if (fields.pricePaise !== undefined || packages) {
     data.headlinePricePaise = headlinePrice({ pricePaise: fields.pricePaise, packages });
   }
@@ -274,7 +291,7 @@ export async function updateListing({ db }, id, userId, parseChanges) {
     return tx.listing.update({ where: { id }, data, include: listingInclude });
   });
 
-  return toListing(updated);
+  return toListing(updated, false, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +336,7 @@ export async function changeListingStatus({ db, clock }, id, userId, transition)
     return tx.listing.findUniqueOrThrow({ where: { id }, include: listingInclude });
   });
 
-  return toListing(updated);
+  return toListing(updated, false, true);
 }
 
 export async function deleteListing({ db, clock }, id, userId) {
@@ -345,16 +362,16 @@ export async function deleteListing({ db, clock }, id, userId) {
 // ---------------------------------------------------------------------------
 
 /** Turns listing rows into responses, marking the ones `viewerId` has liked. */
-export async function toListings(db, rows, viewerId = null) {
+export async function toListings(db, rows, viewerId = null, forOwner = false) {
   const liked = await likedListingIds(
     db,
     viewerId,
     rows.map((row) => row.id),
   );
-  return rows.map((row) => toListing(row, liked.has(row.id)));
+  return rows.map((row) => toListing(row, liked.has(row.id), forOwner));
 }
 
-async function listListings(db, where, query, viewerId = null) {
+async function listListings(db, where, query, viewerId = null, forOwner = false) {
   const [rows, total] = await Promise.all([
     db.listing.findMany({
       where,
@@ -364,12 +381,18 @@ async function listListings(db, where, query, viewerId = null) {
     }),
     db.listing.count({ where }),
   ]);
-  return paged(await toListings(db, rows, viewerId), total, query);
+  return paged(await toListings(db, rows, viewerId, forOwner), total, query);
 }
 
 export function listOwnListings({ db }, userId, query) {
   const { status, mode, category } = query;
-  return listListings(db, { sellerId: userId, deletedAt: null, status, mode, category }, query);
+  return listListings(
+    db,
+    { sellerId: userId, deletedAt: null, status, mode, category },
+    query,
+    userId,
+    true,
+  );
 }
 
 export function listSellerListings({ db }, sellerId, query, viewerId = null) {
@@ -432,7 +455,7 @@ export async function addListingImages(deps, id, userId, files) {
     throw error;
   }
 
-  return toListing(await loadListing(db, id));
+  return toListing(await loadListing(db, id), false, true);
 }
 
 function tooManyImages() {
@@ -463,7 +486,7 @@ export async function removeListingImage(deps, id, userId, imageId) {
   );
   await discardStored(deps, [image]);
 
-  return toListing(await loadListing(db, id));
+  return toListing(await loadListing(db, id), false, true);
 }
 
 export async function reorderListingImages({ db }, id, userId, imageIds) {
@@ -487,5 +510,5 @@ export async function reorderListingImages({ db }, id, userId, imageIds) {
     ),
   );
 
-  return toListing(await loadListing(db, id));
+  return toListing(await loadListing(db, id), false, true);
 }

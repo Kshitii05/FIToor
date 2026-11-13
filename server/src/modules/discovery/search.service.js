@@ -6,8 +6,11 @@ import {
   SUGGESTION_MIN_LENGTH,
   SUGGESTIONS_MAX,
 } from '../../config/policy.js';
+import { AppError } from '../../lib/errors.js';
+import { pointSql } from '../../lib/geo.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
 import { listingInclude, toListings } from '../listings/listings.service.js';
+import { describeOrigin, resolveOrigin, withDistances } from '../locations/locations.service.js';
 
 // Search runs as SQL so PostgreSQL does the matching, filtering, ranking and paging
 // with its indexes. Values always travel as bound parameters, never as SQL text.
@@ -34,7 +37,11 @@ export function toTsQuery(text) {
 
 const keywordMatch = (tsQuery) => Prisma.sql`l.search_vector @@ to_tsquery('english', ${tsQuery})`;
 
-function conditionsFor(filters, tsQuery) {
+/** Within `metres` of the origin, measured from the listing's public point. */
+export const within = (origin, metres) =>
+  Prisma.sql`ST_DWithin(l.public_location, ${pointSql(origin)}, ${metres}::float8)`;
+
+function conditionsFor(filters, tsQuery, origin) {
   const conditions = [VISIBLE];
   if (tsQuery) conditions.push(keywordMatch(tsQuery));
   if (filters.category) {
@@ -56,11 +63,21 @@ function conditionsFor(filters, tsQuery) {
     conditions.push(Prisma.sql`l.headline_price_paise <= ${filters.maxPricePaise}`);
   }
   if (filters.available) conditions.push(AVAILABLE);
+  if (filters.radiusKm) conditions.push(within(origin, filters.radiusKm * 1000));
+  if (filters.deliversToMe) {
+    conditions.push(
+      Prisma.sql`l.offers_delivery AND ST_DWithin(l.public_location, ${pointSql(origin)}, l.delivery_radius_km * 1000)`,
+    );
+  }
   return Prisma.join(conditions, ' AND ');
 }
 
-function orderFor(sort, tsQuery) {
+function orderFor(sort, tsQuery, origin) {
   switch (sort) {
+    case 'nearest':
+      // Listings without a location come last.
+      return Prisma.sql`ST_Distance(l.public_location, ${pointSql(origin)}) ASC NULLS LAST,
+        l.created_at DESC, l.id`;
     case 'price_asc':
       return Prisma.sql`l.headline_price_paise ASC, l.created_at DESC, l.id`;
     case 'price_desc':
@@ -100,11 +117,17 @@ export async function listingsInOrder(db, ids, viewerId) {
 
 /**
  * Keyword search with filters, sorting and paging. Also returns the brands, sizes
- * and colours found among the matches, for the filter lists.
+ * and colours found among the matches, for the filter lists. With an origin (see
+ * resolveOrigin) each listing carries its shown distance, and the distance filters
+ * and nearest-first sort become available.
  */
 export async function searchListings({ db, clock }, query, viewerId = null) {
+  const origin = await resolveOrigin({ db }, query, viewerId);
+  if (!origin && (query.radiusKm || query.deliversToMe || query.sort === 'nearest')) {
+    throw new AppError(400, 'LOCATION_REQUIRED', 'Choose a location to search near');
+  }
   const tsQuery = toTsQuery(query.q);
-  const where = conditionsFor(query, tsQuery);
+  const where = conditionsFor(query, tsQuery, origin);
   const sort = query.sort ?? (tsQuery ? 'relevance' : 'newest');
   const { skip, take } = pageWindow(query);
 
@@ -112,7 +135,7 @@ export async function searchListings({ db, clock }, query, viewerId = null) {
     db.$queryRaw`
       SELECT l.id ${FROM_LISTINGS}
       WHERE ${where}
-      ORDER BY ${orderFor(sort, tsQuery)}
+      ORDER BY ${orderFor(sort, tsQuery, origin)}
       LIMIT ${take} OFFSET ${skip}`,
     db.$queryRaw`SELECT count(*)::int AS total ${FROM_LISTINGS} WHERE ${where}`,
     facet(db, Prisma.sql`l.brand`, where),
@@ -124,12 +147,21 @@ export async function searchListings({ db, clock }, query, viewerId = null) {
     await rememberSearch({ db, clock }, viewerId, query.q);
   }
 
-  const items = await listingsInOrder(
+  const items = await withDistances(
     db,
-    page.map((row) => row.id),
-    viewerId,
+    await listingsInOrder(
+      db,
+      page.map((row) => row.id),
+      viewerId,
+    ),
+    origin,
   );
-  return { ...paged(items, total, query), sort, facets: { brands, sizes, colours } };
+  return {
+    ...paged(items, total, query),
+    sort,
+    origin: describeOrigin(origin),
+    facets: { brands, sizes, colours },
+  };
 }
 
 // ---------------------------------------------------------------------------

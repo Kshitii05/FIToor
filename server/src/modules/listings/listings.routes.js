@@ -3,6 +3,8 @@ import { LISTING_IMAGE_MAX_BYTES, LISTING_IMAGES_MAX } from '../../config/policy
 import { requireVerified } from '../../lib/auth.js';
 import { AppError } from '../../lib/errors.js';
 import { uploadImages } from '../../lib/upload.js';
+import { homeQuerySchema as listingOriginQuerySchema } from '../discovery/discovery.validation.js';
+import { resolveOrigin, withDistances } from '../locations/locations.service.js';
 import {
   addListingImages,
   changeListingStatus,
@@ -60,7 +62,11 @@ export function createListingsRouter(deps) {
 
   router.get('/:id', optionalAuth, async (req, res) => {
     const { id } = listingIdParamsSchema.parse(req.params);
-    res.json({ listing: await getListing(deps, id, req.auth?.userId ?? null) });
+    const viewerId = req.auth?.userId ?? null;
+    const origin = await resolveOrigin(deps, listingOriginQuerySchema.parse(req.query), viewerId);
+    const listing = await getListing(deps, id, viewerId);
+    const [withDistance] = await withDistances(deps.db, [listing], origin);
+    res.json({ listing: withDistance });
   });
 
   router.patch('/:id', requireAuth, async (req, res) => {

@@ -17,6 +17,7 @@ import {
   RENTAL_PACKAGE_MAX_DAYS,
   RENTAL_PACKAGES_MAX,
 } from '../../config/policy.js';
+import { placeSchema } from '../../lib/geo.js';
 import { paginationQuery } from '../../lib/pagination.js';
 
 export const LISTING_MODES = ['SALE', 'RENT'];
@@ -85,6 +86,8 @@ const commonFields = {
   // null means the listing does not offer delivery.
   delivery: deliverySchema.nullable(),
   pickup: z.boolean(),
+  // Where the item is: the seller's pin and the area name to show with it.
+  location: placeSchema,
 };
 
 const saleFields = {

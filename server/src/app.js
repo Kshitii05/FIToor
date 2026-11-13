@@ -22,6 +22,11 @@ import {
 } from './modules/discovery/discovery.routes.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
 import {
+  createPlacesRouter,
+  createSavedLocationsRouter,
+} from './modules/locations/locations.routes.js';
+import { createPlaceLookup } from './modules/locations/places.service.js';
+import {
   createListingsRouter,
   createMyListingsRouter,
   createSellerListingsRouter,
@@ -42,6 +47,7 @@ export function createApp({
   emailSender = createEmailSender({ logger }),
   otpSender = createOtpSender({ logger }),
   imageStorage = createImageStorage(),
+  placeLookup = createPlaceLookup({ logger }),
   rateLimiting = { enabled: env.NODE_ENV !== 'test', makeStore: createRedisRateLimitStore },
   configureRoutes,
 } = {}) {
@@ -69,6 +75,7 @@ export function createApp({
     emailSender,
     otpSender,
     imageStorage,
+    placeLookup,
     limiters: createLimiters(rateLimiting),
     requireAuth,
     optionalAuth: createOptionalAuth(requireAuth),
@@ -82,6 +89,8 @@ export function createApp({
   api.use('/listings', createBrowseRouter(deps));
   api.use('/listings', createListingsRouter(deps));
   api.use('/me/listings', createMyListingsRouter(deps));
+  api.use('/me/locations', createSavedLocationsRouter(deps));
+  api.use('/places', createPlacesRouter(deps));
   api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));

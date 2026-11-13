@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { listingIdParamsSchema } from '../listings/listings.validation.js';
 import { likeListing, unlikeListing } from './activity.service.js';
 import {
+  homeQuerySchema,
   likedListingsQuerySchema,
   searchQuerySchema,
   suggestionsQuerySchema,
@@ -51,7 +52,8 @@ export function createHomeRouter(deps) {
   const router = Router();
 
   router.get('/', deps.optionalAuth, async (req, res) => {
-    res.json(await homeSections(deps, viewer(req)));
+    const query = homeQuerySchema.parse(req.query);
+    res.json(await homeSections(deps, viewer(req), query));
   });
 
   return router;

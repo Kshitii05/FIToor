@@ -1,4 +1,8 @@
 import request from 'supertest';
+import { publicPoint } from '../src/lib/geo.js';
+
+/** A spot in Indiranagar, Bengaluru, used as the default pin. */
+export const INDIRANAGAR = { lat: 12.97194, lng: 77.64115, locality: 'Indiranagar' };
 
 // Smallest byte sequences the server accepts as each image type: it reads the
 // leading bytes, not the file name.
@@ -28,6 +32,7 @@ export function saleDetails(overrides = {}) {
     quantity: 1,
     delivery: { chargePaise: 8000, radiusKm: 10 },
     pickup: true,
+    location: INDIRANAGAR,
     ...overrides,
   };
 }
@@ -51,6 +56,7 @@ export function rentDetails(overrides = {}) {
     ],
     delivery: null,
     pickup: true,
+    location: INDIRANAGAR,
     ...overrides,
   };
 }
@@ -79,11 +85,12 @@ let inserted = 0;
 /**
  * Puts a listing straight into the database, for tests that need many listings and
  * are not about creating them. `seller` is an account from registerUser.
- * Pass `mode: 'RENT'` with `packages` for a rental; `pricePaise` sets a sale price.
+ * Pass `mode: 'RENT'` with `packages` for a rental; `pricePaise` sets a sale price;
+ * `location: { lat, lng, locality }` places it (none by default).
  */
 export async function insertListing(seller, overrides = {}) {
   inserted += 1;
-  const { mode = 'SALE', packages, images = 1, ...fields } = overrides;
+  const { mode = 'SALE', packages, images = 1, location, ...fields } = overrides;
   const { db } = await import('./helpers.js');
   const rentPackages = packages ?? [{ durationDays: 3, pricePaise: 150000 }];
   const terms =
@@ -102,6 +109,7 @@ export async function insertListing(seller, overrides = {}) {
     offersDelivery: false,
     offersPickup: true,
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
+    ...(location ? locationColumns(location) : {}),
     ...terms,
     ...fields,
   };
@@ -123,4 +131,9 @@ export async function insertListing(seller, overrides = {}) {
       },
     },
   });
+}
+
+function locationColumns({ lat, lng, locality }) {
+  const shown = publicPoint({ lat, lng });
+  return { pinLat: lat, pinLng: lng, publicLat: shown.lat, publicLng: shown.lng, locality };
 }
