@@ -9,11 +9,20 @@ import { systemClock } from './lib/clock.js';
 import { db as defaultDb } from './lib/db.js';
 import { createErrorHandler, notFoundHandler } from './lib/errors.js';
 import { createImageStorage, LOCAL_UPLOADS_ROUTE } from './lib/imageStorage.js';
+import { createPaymentGateway } from './lib/paymentGateway.js';
 import { createEmailSender } from './lib/mailer.js';
 import { createOtpSender } from './lib/otpSender.js';
 import { createLimiters } from './lib/rateLimit.js';
 import { createRedisRateLimitStore } from './lib/redis.js';
+import { createAddressesRouter } from './modules/addresses/addresses.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
+import { createCartRouter } from './modules/cart/cart.js';
+import { createCheckoutRouter, createWebhookRouter } from './modules/checkout/checkout.routes.js';
+import {
+  createAdminOrdersRouter,
+  createBuyerOrdersRouter,
+  createSellerOrdersRouter,
+} from './modules/orders/order.routes.js';
 import {
   createBrowseRouter,
   createHomeRouter,
@@ -48,6 +57,7 @@ export function createApp({
   otpSender = createOtpSender({ logger }),
   imageStorage = createImageStorage(),
   placeLookup = createPlaceLookup({ logger }),
+  paymentGateway = createPaymentGateway(),
   rateLimiting = { enabled: env.NODE_ENV !== 'test', makeStore: createRedisRateLimitStore },
   configureRoutes,
 } = {}) {
@@ -59,7 +69,15 @@ export function createApp({
 
   app.use(helmet());
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
-  app.use(express.json({ limit: '100kb' }));
+  // The raw body is kept for checking webhook signatures, which cover the exact bytes.
+  app.use(
+    express.json({
+      limit: '100kb',
+      verify: (req, _res, buffer) => {
+        req.rawBody = buffer.toString('utf8');
+      },
+    }),
+  );
   app.use(cookieParser());
 
   // Development without an image host keeps uploads on disk and serves them here.
@@ -76,10 +94,14 @@ export function createApp({
     otpSender,
     imageStorage,
     placeLookup,
+    paymentGateway,
     limiters: createLimiters(rateLimiting),
     requireAuth,
     optionalAuth: createOptionalAuth(requireAuth),
   };
+
+  // Scheduled jobs and tests reach the same dependencies the routes use.
+  app.locals.deps = deps;
 
   const api = express.Router();
   api.use('/health', createHealthRouter(deps));
@@ -91,8 +113,15 @@ export function createApp({
   api.use('/me/listings', createMyListingsRouter(deps));
   api.use('/me/locations', createSavedLocationsRouter(deps));
   api.use('/places', createPlacesRouter(deps));
-  api.use('/me', createMyDiscoveryRouter(deps));
+  api.use('/cart', createCartRouter(deps));
+  api.use('/me/addresses', createAddressesRouter(deps));
+  api.use('/checkouts', createCheckoutRouter(deps));
+  api.use('/payments', createWebhookRouter(deps));
+  api.use('/me/orders', createBuyerOrdersRouter(deps));
+  api.use('/me/sales', createSellerOrdersRouter(deps));
+  api.use('/admin/orders', createAdminOrdersRouter(deps));
   api.use('/me', createMeRouter(deps));
+  api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));
   api.use('/users', createUsersRouter(deps));
   configureRoutes?.(api);
