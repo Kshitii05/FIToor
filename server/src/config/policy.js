@@ -92,3 +92,24 @@ export const RENTAL_PACKAGE_MAX_DAYS = 30;
 // Lists
 export const PAGE_SIZE_DEFAULT = 20;
 export const PAGE_SIZE_MAX = 50;
+
+// Search and discovery (SPEC Module 6; values are DECISIONS I32 to I38, PROVISIONAL)
+export const SEARCH_QUERY_MAX_LENGTH = 100;
+export const SEARCH_TERMS_MAX = 8;
+export const SUGGESTION_MIN_LENGTH = 2;
+export const SUGGESTIONS_MAX = 5;
+export const SEARCH_HISTORY_MAX = 10;
+export const FACET_VALUES_MAX = 20;
+
+// Popularity of a listing = unique signed-in views + this weight for each like.
+export const POPULARITY_LIKE_WEIGHT = 3;
+
+// Home page sections
+export const HOME_SECTION_SIZE = 12;
+export const TRENDING_WINDOW_DAYS = 14;
+export const BUDGET_MAX_PAISE = 1_000_00;
+
+// "For You": how much each kind of activity says about a person's taste, and how
+// much a match on each attribute of a listing counts.
+export const RECOMMENDATION_SIGNAL_WEIGHTS = Object.freeze({ viewed: 1, liked: 3, purchased: 5 });
+export const RECOMMENDATION_MATCH_WEIGHTS = Object.freeze({ category: 3, brand: 2, size: 1 });

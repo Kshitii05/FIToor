@@ -52,6 +52,9 @@ model User {
   sessions      UserSession[]
   listings      Listing[]
   listingEvents ListingStatusEvent[]
+  likes         ListingLike[]
+  views         ListingView[]
+  searches      SearchHistory[]
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -187,14 +190,34 @@ model Listing {
   // Soft delete: the row stays so orders and bookings can still refer to it.
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
+  // Discovery. Kept on the row so sorting and filtering need no joins.
+  // The sale price, or the price of the cheapest rental package.
+  headlinePricePaise Int                      @map("headline_price_paise")
+  viewCount          Int                      @default(0) @map("view_count")
+  likeCount          Int                      @default(0) @map("like_count")
+  // Views plus weighted likes; see POPULARITY_LIKE_WEIGHT.
+  popularityScore    Int                      @default(0) @map("popularity_score")
+  // Filled by a database trigger from title, brand, colour, category and description.
+  searchVector       Unsupported("tsvector")? @map("search_vector")
+
   seller       User                 @relation(fields: [sellerId], references: [id])
   packages     RentalPackage[]
   images       ListingImage[]
   statusEvents ListingStatusEvent[]
+  likes        ListingLike[]
+  views        ListingView[]
 
   // Target of the rental package foreign key, which carries the mode.
   @@unique([id, mode])
   @@index([sellerId, deletedAt, status])
+  // Search and browse
+  @@index([searchVector], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "listings_title_trgm_idx")
+  @@index([brand(ops: raw("gin_trgm_ops"))], type: Gin, map: "listings_brand_trgm_idx")
+  @@index([status, createdAt(sort: Desc)])
+  @@index([status, headlinePricePaise])
+  @@index([status, popularityScore(sort: Desc)])
+  @@index([status, category])
   @@map("listings")
 }
 
@@ -245,4 +268,50 @@ model ListingStatusEvent {
 
   @@index([listingId, createdAt])
   @@map("listing_status_events")
+}
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+model ListingLike {
+  userId    String   @map("user_id") @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+  @@index([listingId, createdAt])
+  @@index([userId, createdAt])
+  @@map("listing_likes")
+}
+
+// One row per user, listing and calendar day (business time zone): a "unique view".
+model ListingView {
+  userId    String   @map("user_id") @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  viewedOn  DateTime @map("viewed_on") @db.Date
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId, viewedOn])
+  @@index([listingId, viewedOn])
+  @@map("listing_views")
+}
+
+// A user's recent searches, offered back as suggestions. One row per distinct query.
+model SearchHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  query     String
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, query])
+  @@index([userId, createdAt])
+  @@map("search_history")
 }

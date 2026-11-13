@@ -3,6 +3,7 @@ import {
   addBusinessDays,
   addDays,
   addHours,
+  businessDate,
   businessWeekday,
   createFixedClock,
   isBusinessDay,
@@ -80,6 +81,13 @@ describe('business days', () => {
     // Sunday 19:00 UTC is already Monday 00:30 in IST.
     expect(businessWeekday('2026-11-15T19:00:00.000Z')).toBe(1);
     expect(isBusinessDay('2026-11-15T19:00:00.000Z')).toBe(true);
+  });
+
+  it('gives the calendar date in Asia/Kolkata', () => {
+    expect(businessDate('2026-11-13T06:30:00.000Z')).toBe('2026-11-13');
+    // 18:29 UTC is 23:59 IST the same day; 18:30 UTC is midnight, the next day.
+    expect(businessDate('2026-11-13T18:29:59.000Z')).toBe('2026-11-13');
+    expect(businessDate('2026-11-13T18:30:00.000Z')).toBe('2026-11-14');
   });
 
   it('adds business days within a week', () => {

@@ -63,6 +63,18 @@ export function businessWeekday(instant) {
   return ISO_WEEKDAY[weekdayFormatter.format(toDate(instant))];
 }
 
+const businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** The calendar date of the instant in the business time zone, as `YYYY-MM-DD`. */
+export function businessDate(instant) {
+  return businessDateFormatter.format(toDate(instant));
+}
+
 export function isBusinessDay(instant) {
   return BUSINESS_WEEKDAYS.includes(businessWeekday(instant));
 }
