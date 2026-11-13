@@ -1,16 +1,20 @@
 import { Queue, Worker } from 'bullmq';
-import { ACCOUNT_PURGE_INTERVAL_MINUTES } from '../config/policy.js';
+import { ACCOUNT_PURGE_INTERVAL_MINUTES, ORDER_JOBS_INTERVAL_SECONDS } from '../config/policy.js';
 import { createRedisConnection } from '../lib/redis.js';
+import { runOrderJobs } from '../modules/orders/order.jobs.js';
 import { purgeExpiredDeletions } from '../modules/users/deletion.service.js';
 
 const QUEUE_NAME = 'maintenance';
 const PURGE_DELETED_ACCOUNTS = 'purge-deleted-accounts';
+const ORDER_DEADLINES = 'order-deadlines';
 
 /**
  * Starts the scheduled background jobs. Called once by the server process;
- * tests exercise the job functions directly instead.
+ * tests exercise the job functions directly instead. `deps` are the app's
+ * dependencies (database, clock, email, payment gateway).
  */
-export async function startJobs({ db, clock, logger }) {
+export async function startJobs(deps) {
+  const { db, clock, logger } = deps;
   // BullMQ requires its connections to retry commands indefinitely.
   const queueConnection = createRedisConnection({ maxRetriesPerRequest: null });
   const workerConnection = createRedisConnection({ maxRetriesPerRequest: null });
@@ -21,6 +25,12 @@ export async function startJobs({ db, clock, logger }) {
     { every: ACCOUNT_PURGE_INTERVAL_MINUTES * 60 * 1000 },
     { name: PURGE_DELETED_ACCOUNTS, opts: { removeOnComplete: 50, removeOnFail: 200 } },
   );
+  // Checkout expiry, dispatch, receipt and issue deadlines, and refund retries.
+  await queue.upsertJobScheduler(
+    ORDER_DEADLINES,
+    { every: ORDER_JOBS_INTERVAL_SECONDS * 1000 },
+    { name: ORDER_DEADLINES, opts: { removeOnComplete: 50, removeOnFail: 200 } },
+  );
 
   const worker = new Worker(
     QUEUE_NAME,
@@ -30,6 +40,7 @@ export async function startJobs({ db, clock, logger }) {
         if (purged > 0) logger.info(`Erased ${purged} account(s) past their recovery period`);
         return { purged };
       }
+      if (job.name === ORDER_DEADLINES) return runOrderJobs(deps);
       throw new Error(`Unknown job: ${job.name}`);
     },
     { connection: workerConnection },

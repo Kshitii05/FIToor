@@ -11,7 +11,8 @@
     "migrate": "dotenv -e ../.env -- prisma migrate dev",
     "migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy",
     "generate": "prisma generate",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "make-admin": "node scripts/make-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
