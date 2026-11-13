@@ -1,6 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
 import { GuestOnly, RequireAuth } from './auth/guards.jsx';
 import { AppLayout } from './components/layout/AppLayout.jsx';
+import BuyerOrderPage from './pages/BuyerOrderPage.jsx';
+import CartPage from './pages/CartPage.jsx';
+import CheckoutPage from './pages/CheckoutPage.jsx';
 import EditListingPage from './pages/EditListingPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -10,10 +13,12 @@ import LoginPage from './pages/LoginPage.jsx';
 import MyListingsPage from './pages/MyListingsPage.jsx';
 import NewListingPage from './pages/NewListingPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import OrdersListPage from './pages/OrdersListPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PublicProfilePage from './pages/PublicProfilePage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
+import SellerOrderPage from './pages/SellerOrderPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import VerifyPage from './pages/VerifyPage.jsx';
 
@@ -38,6 +43,12 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="my-listings" element={<MyListingsPage />} />
           <Route path="liked" element={<LikedPage />} />
+          <Route path="cart" element={<CartPage />} />
+          <Route path="checkout/:id" element={<CheckoutPage />} />
+          <Route path="orders" element={<OrdersListPage key="buyer" side="buyer" />} />
+          <Route path="orders/:id" element={<BuyerOrderPage />} />
+          <Route path="sales" element={<OrdersListPage key="seller" side="seller" />} />
+          <Route path="sales/:id" element={<SellerOrderPage />} />
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="listings/:id/edit" element={<EditListingPage />} />
         </Route>

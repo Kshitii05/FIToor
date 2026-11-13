@@ -163,3 +163,26 @@ export function ResultsMap({ listings, className = 'h-[28rem]' }) {
     />
   );
 }
+
+/** An exact spot, for the buyer of a paid pickup order. Not interactive. */
+export function PointMap({ point, className = 'h-48' }) {
+  const [ref, map] = useLeafletMap({ center: point, zoom: 16, interactive: false });
+
+  useEffect(() => {
+    if (!map) return undefined;
+    const marker = L.marker([point.lat, point.lng], { icon: dotIcon(), keyboard: false }).addTo(
+      map,
+    );
+    map.setView([point.lat, point.lng], 16);
+    return () => marker.remove();
+  }, [map, point]);
+
+  return (
+    <div
+      ref={ref}
+      className={`${frame} ${className}`}
+      role="img"
+      aria-label="Map of the pickup spot"
+    />
+  );
+}
