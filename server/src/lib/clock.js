@@ -75,6 +75,36 @@ export function businessDate(instant) {
   return businessDateFormatter.format(toDate(instant));
 }
 
+const partsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: BUSINESS_TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/**
+ * The instant at `hour`:00 on the calendar date `date` (`YYYY-MM-DD`) in the business
+ * time zone, such as 8 pm India time on a rental's last day.
+ */
+export function atBusinessTime(date, hour) {
+  const [year, month, day] = date.split('-').map(Number);
+  const guess = Date.UTC(year, month - 1, day, hour);
+  const part = Object.fromEntries(
+    partsFormatter.formatToParts(new Date(guess)).map(({ type, value }) => [type, value]),
+  );
+  const shown = Date.UTC(part.year, part.month - 1, part.day, part.hour, part.minute);
+  return new Date(guess - (shown - guess));
+}
+
+/** The calendar date `days` after `date`, both `YYYY-MM-DD`. */
+export function addCalendarDays(date, days) {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export function isBusinessDay(instant) {
   return BUSINESS_WEEKDAYS.includes(businessWeekday(instant));
 }

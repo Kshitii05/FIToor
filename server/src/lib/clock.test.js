@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   addBusinessDays,
+  addCalendarDays,
   addDays,
   addHours,
+  atBusinessTime,
   businessDate,
   businessWeekday,
   createFixedClock,
@@ -120,5 +122,18 @@ describe('business days', () => {
   it('rejects negative or fractional counts', () => {
     expect(() => addBusinessDays(FRIDAY_NOON_IST, -1)).toThrow(RangeError);
     expect(() => addBusinessDays(FRIDAY_NOON_IST, 1.5)).toThrow(RangeError);
+  });
+});
+
+describe('atBusinessTime and addCalendarDays', () => {
+  it('gives the instant of an hour on a date in India time', () => {
+    expect(atBusinessTime('2026-11-22', 20).toISOString()).toBe('2026-11-22T14:30:00.000Z');
+    expect(atBusinessTime('2026-11-22', 0).toISOString()).toBe('2026-11-21T18:30:00.000Z');
+  });
+
+  it('adds calendar days across month and year ends', () => {
+    expect(addCalendarDays('2026-11-30', 1)).toBe('2026-12-01');
+    expect(addCalendarDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addCalendarDays('2026-11-22', -2)).toBe('2026-11-20');
   });
 });

@@ -6,6 +6,7 @@ import { recordLedger } from '../../lib/ledger.js';
 import { commissionOn } from '../../lib/money.js';
 import { reserveStock } from '../checkout/checkout.service.js';
 import { notify } from '../orders/order.emails.js';
+import { confirmBookingPayment } from '../rentals/rental.payments.js';
 import {
   createRefund,
   markRefundFailed,
@@ -118,6 +119,13 @@ async function createOrders(tx, now, checkout, payment) {
 export async function confirmPayment(deps, entity) {
   const { db, clock } = deps;
   const now = clock.now();
+
+  // A rental booking's payment has its own rules (rental.payments.js).
+  const booking = await db.rentalBooking.findUnique({
+    where: { gatewayOrderId: entity.order_id },
+    select: { id: true },
+  });
+  if (booking) return confirmBookingPayment(deps, entity);
 
   const outcome = await db.$transaction(async (tx) => {
     const [locked] = await tx.$queryRaw`

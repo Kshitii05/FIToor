@@ -4,6 +4,7 @@ import { AppError } from '../../lib/errors.js';
 import { recordLedger } from '../../lib/ledger.js';
 import { refundSplit } from '../../lib/money.js';
 import { notify } from '../orders/order.emails.js';
+import { notifyBooking } from '../rentals/rental.emails.js';
 
 // Refunds. A refund row is created in the same transaction as the order change that
 // causes it, then sent to the gateway afterwards. Its `key` means each refund can
@@ -18,7 +19,17 @@ import { notify } from '../orders/order.emails.js';
 export async function createRefund(
   tx,
   now,
-  { key, checkoutId, orderId, paymentId, amountPaise, itemsAmountPaise, reason },
+  {
+    key,
+    checkoutId,
+    orderId,
+    bookingId,
+    paymentId,
+    amountPaise,
+    itemsAmountPaise,
+    depositAmountPaise = 0,
+    reason,
+  },
 ) {
   const existing = await tx.refund.findUnique({ where: { key } });
   if (existing) return existing;
@@ -39,11 +50,13 @@ export async function createRefund(
   return tx.refund.create({
     data: {
       key,
-      checkoutId,
+      checkoutId: checkoutId ?? null,
       orderId: orderId ?? null,
+      bookingId: bookingId ?? null,
       paymentId,
       amountPaise,
       itemsAmountPaise,
+      depositAmountPaise,
       reason,
       createdAt: now,
     },
@@ -61,6 +74,9 @@ export async function markRefundProcessed(deps, refundId) {
     });
     if (count !== 1) return null;
     const refund = await tx.refund.findUniqueOrThrow({ where: { id: refundId } });
+    if (refund.bookingId && !UNACCEPTED_PAYMENT.includes(refund.reason)) {
+      return { refund, booking: await applyBookingRefund(tx, now, refund) };
+    }
 
     const rows = [
       {
@@ -69,6 +85,7 @@ export async function markRefundProcessed(deps, refundId) {
         amountPaise: refund.amountPaise,
         checkoutId: refund.checkoutId,
         orderId: refund.orderId,
+        bookingId: refund.bookingId,
         paymentId: refund.paymentId,
         refundId: refund.id,
       },
@@ -118,7 +135,84 @@ export async function markRefundProcessed(deps, refundId) {
   });
 
   if (done?.order) await notify(deps, done.order, 'buyer', 'refunded', done.refund.amountPaise);
+  if (done?.booking) {
+    await notifyBooking(deps, done.booking, 'renter', 'refunded', done.refund.amountPaise);
+    if (done.booking.completed) await notifyBooking(deps, done.booking, 'owner', 'completedOwner');
+  }
   return done;
+}
+
+// A payment the booking never accepted (late, or a second one) goes back whole: no
+// part of it was a deposit or a fee, so it is recorded like a checkout refund.
+const UNACCEPTED_PAYMENT = ['LATE_PAYMENT', 'DUPLICATE_PAYMENT'];
+
+/**
+ * Ledger rows for a processed booking refund, in `tx`. The deposit part is a deposit
+ * refund, never a buyer refund; the fee part reverses commission, recalculated on
+ * what remains of the fee. A processed deposit refund completes a settling booking.
+ */
+async function applyBookingRefund(tx, now, refund) {
+  await tx.$queryRaw`SELECT id FROM rental_bookings WHERE id = ${refund.bookingId}::uuid FOR UPDATE`;
+  const booking = await tx.rentalBooking.findUniqueOrThrow({ where: { id: refund.bookingId } });
+  const otherPaise = refund.amountPaise - refund.depositAmountPaise;
+  const split = refundSplit({
+    itemsSubtotalPaise: booking.feePaise,
+    itemsRefundedBeforePaise: booking.feeRefundedPaise,
+    refundPaise: otherPaise,
+    itemsPartPaise: refund.itemsAmountPaise,
+  });
+  const common = { bookingId: booking.id, paymentId: refund.paymentId, refundId: refund.id };
+  await recordLedger(tx, now, [
+    {
+      key: `refund:${refund.id}:paid-out`,
+      type: 'BUYER_REFUND',
+      amountPaise: otherPaise,
+      ...common,
+    },
+    {
+      key: `refund:${refund.id}:deposit`,
+      type: 'DEPOSIT_REFUND',
+      amountPaise: refund.depositAmountPaise,
+      ...common,
+    },
+    {
+      key: `refund:${refund.id}:commission-reversal`,
+      type: 'COMMISSION_REVERSAL',
+      amountPaise: split.commissionReversalPaise,
+      ...common,
+      sellerId: booking.ownerId,
+    },
+    {
+      key: `refund:${refund.id}:seller-payable-reversal`,
+      type: 'SELLER_PAYABLE_REVERSAL',
+      amountPaise: split.sellerPayableReversalPaise,
+      ...common,
+      sellerId: booking.ownerId,
+    },
+  ]);
+  const completes = refund.reason === 'DEPOSIT_RETURN' && booking.status === 'SETTLING';
+  const updated = await tx.rentalBooking.update({
+    where: { id: booking.id },
+    data: {
+      refundedPaise: { increment: otherPaise },
+      feeRefundedPaise: { increment: refund.itemsAmountPaise },
+      depositRefundedPaise: { increment: refund.depositAmountPaise },
+      ...(completes ? { status: 'COMPLETED', completedAt: now } : {}),
+    },
+  });
+  if (completes) {
+    await tx.bookingEvent.create({
+      data: {
+        bookingId: booking.id,
+        actorRole: 'SYSTEM',
+        action: 'DEPOSIT_REFUNDED',
+        fromStatus: 'SETTLING',
+        toStatus: 'COMPLETED',
+        createdAt: now,
+      },
+    });
+  }
+  return Object.assign(updated, { completed: completes });
 }
 
 /**

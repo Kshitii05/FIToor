@@ -20,7 +20,24 @@ export const RENTAL_PENDING_HOLD_HOURS = 24;
 export const RENTAL_PAYMENT_WINDOW_HOURS = 12; // DECISIONS I5 (PROVISIONAL)
 export const DEPOSIT_AUTO_REFUND_AFTER_RETURN_HOURS = 48;
 export const LATE_FEE_GRACE_HOURS = 24;
+export const LATE_FEE_PERIOD_HOURS = 24; // each started period after the grace is charged
 export const RENTAL_CONDITION_PHOTOS_MIN = 2; // DECISIONS I17 (PROVISIONAL)
+export const RENTAL_CONDITION_PHOTOS_MAX = 8;
+export const CLAIM_RESPONSE_HOURS = 48; // SPEC 13: renter answers a damage claim
+// Rental cancellation after payment (SPEC Module 4): share of the fee refunded.
+export const RENTAL_REFUND_BPS_BEFORE_START = 5000; // before the start day: 50%
+export const RENTAL_REFUND_BPS_FROM_START = 0; // on or after the start day: nothing
+// DECISIONS I59 onwards (PROVISIONAL)
+export const RENTAL_RETURN_HOUR = 20; // due back by 8 pm (business time) on the last day
+export const RENTAL_BOOKING_WINDOW_DAYS = 90; // start dates from tomorrow up to this far ahead
+export const RENTAL_OPEN_REQUESTS_MAX = 5; // unpaid requests a renter may have at once
+export const RENTAL_NON_RETURN_REPORT_DAYS = 3; // owner may report non-return this long after due
+export const RENTAL_RETURN_REMINDER_HOURS = 24; // "one day before return" reminder
+export const RENTAL_DUE_DAY_REMINDER_HOURS = 8; // "on the return date" reminder, before the due time
+export const CLAIM_ITEMS_MAX = 10;
+export const CLAIM_PHOTOS_MIN = 1;
+export const CLAIM_DESCRIPTION_MIN_LENGTH = 10;
+export const BLOCKED_RANGES_MAX = 20;
 
 // Disputes (DECISIONS I13, PROVISIONAL)
 export const APPEAL_WINDOW_DAYS = 3;
@@ -59,6 +76,7 @@ export const RATE_LIMITS = Object.freeze({
   otp: Object.freeze({ windowMinutes: 15, max: 30 }),
   places: Object.freeze({ windowMinutes: 1, max: 30 }),
   checkout: Object.freeze({ windowMinutes: 15, max: 20 }),
+  rental: Object.freeze({ windowMinutes: 15, max: 20 }),
 });
 
 // Listings (SPEC Module 2; limits are DECISIONS I26 to I31, PROVISIONAL)

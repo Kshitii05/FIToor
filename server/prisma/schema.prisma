@@ -65,6 +65,9 @@ model User {
   sales         Order[]              @relation("OrderSeller")
   orderEvents   OrderEvent[]
   adminActions  AdminAuditLog[]
+  rentals       RentalBooking[]      @relation("BookingRenter")
+  rentedOut     RentalBooking[]      @relation("BookingOwner")
+  bookingEvents BookingEvent[]
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -231,6 +234,9 @@ model Listing {
   cartItems     CartItem[]
   checkoutItems CheckoutItem[]
   orderItems    OrderItem[]
+  bookings      RentalBooking[]
+  dateHolds     RentalDateHold[]
+  blockedDates  RentalBlockedDate[]
 
   // Target of the rental package foreign key, which carries the mode.
   @@unique([id, mode])
@@ -419,6 +425,9 @@ enum RefundReason {
   ISSUE_PARTIAL
   LATE_PAYMENT
   DUPLICATE_PAYMENT
+  RENTER_CANCELLED
+  OWNER_CANCELLED
+  DEPOSIT_RETURN
 }
 
 enum IssueKind {
@@ -446,6 +455,10 @@ enum LedgerEntryType {
   BUYER_REFUND
   COMMISSION_REVERSAL
   SELLER_PAYABLE_REVERSAL
+  // Rentals: the deposit is its own money, never revenue. Collected = refunded + deducted.
+  DEPOSIT_COLLECTED
+  DEPOSIT_REFUND
+  DEPOSIT_DEDUCTION
 }
 
 model CartItem {
@@ -636,10 +649,11 @@ model OrderEvent {
   @@map("order_events")
 }
 
-// A payment the gateway reported for a checkout.
+// A payment the gateway reported for a checkout or a rental booking (exactly one).
 model Payment {
   id               String        @id @default(uuid()) @db.Uuid
-  checkoutId       String        @map("checkout_id") @db.Uuid
+  checkoutId       String?       @map("checkout_id") @db.Uuid
+  bookingId        String?       @map("booking_id") @db.Uuid
   gatewayOrderId   String        @map("gateway_order_id")
   gatewayPaymentId String        @unique @map("gateway_payment_id")
   amountPaise      Int           @map("amount_paise")
@@ -649,10 +663,12 @@ model Payment {
   createdAt        DateTime      @map("created_at") @db.Timestamptz(3)
   capturedAt       DateTime?     @map("captured_at") @db.Timestamptz(3)
 
-  checkout Checkout @relation(fields: [checkoutId], references: [id])
+  checkout Checkout?      @relation(fields: [checkoutId], references: [id])
+  booking  RentalBooking? @relation(fields: [bookingId], references: [id])
   refunds  Refund[]
 
   @@index([checkoutId])
+  @@index([bookingId])
   @@map("payments")
 }
 
@@ -670,28 +686,33 @@ model PaymentEvent {
 
 // A refund of (part of) a payment. `key` makes each refund happen at most once.
 model Refund {
-  id               String       @id @default(uuid()) @db.Uuid
-  key              String       @unique
-  checkoutId       String       @map("checkout_id") @db.Uuid
-  orderId          String?      @map("order_id") @db.Uuid
-  paymentId        String       @map("payment_id") @db.Uuid
-  amountPaise      Int          @map("amount_paise")
-  // The part of the amount that was for items (the commission base).
-  itemsAmountPaise Int          @map("items_amount_paise")
-  reason           RefundReason
-  status           RefundStatus @default(PENDING)
-  gatewayRefundId  String?      @unique @map("gateway_refund_id")
-  attempts         Int          @default(0)
-  lastError        String?      @map("last_error")
-  createdAt        DateTime     @map("created_at") @db.Timestamptz(3)
-  lastAttemptAt    DateTime?    @map("last_attempt_at") @db.Timestamptz(3)
-  processedAt      DateTime?    @map("processed_at") @db.Timestamptz(3)
+  id                 String       @id @default(uuid()) @db.Uuid
+  key                String       @unique
+  checkoutId         String?      @map("checkout_id") @db.Uuid
+  orderId            String?      @map("order_id") @db.Uuid
+  bookingId          String?      @map("booking_id") @db.Uuid
+  paymentId          String       @map("payment_id") @db.Uuid
+  amountPaise        Int          @map("amount_paise")
+  // The part of the amount that was for items or the rental fee (the commission base).
+  itemsAmountPaise   Int          @map("items_amount_paise")
+  // Rentals: the part of the amount that is the security deposit going back.
+  depositAmountPaise Int          @default(0) @map("deposit_amount_paise")
+  reason             RefundReason
+  status             RefundStatus @default(PENDING)
+  gatewayRefundId    String?      @unique @map("gateway_refund_id")
+  attempts           Int          @default(0)
+  lastError          String?      @map("last_error")
+  createdAt          DateTime     @map("created_at") @db.Timestamptz(3)
+  lastAttemptAt      DateTime?    @map("last_attempt_at") @db.Timestamptz(3)
+  processedAt        DateTime?    @map("processed_at") @db.Timestamptz(3)
 
-  checkout Checkout @relation(fields: [checkoutId], references: [id])
-  order    Order?   @relation(fields: [orderId], references: [id])
-  payment  Payment  @relation(fields: [paymentId], references: [id])
+  checkout Checkout?      @relation(fields: [checkoutId], references: [id])
+  order    Order?         @relation(fields: [orderId], references: [id])
+  booking  RentalBooking? @relation(fields: [bookingId], references: [id])
+  payment  Payment        @relation(fields: [paymentId], references: [id])
 
   @@index([status, lastAttemptAt])
+  @@index([bookingId])
   @@map("refunds")
 }
 
@@ -724,6 +745,7 @@ model LedgerEntry {
   amountPaise Int             @map("amount_paise")
   checkoutId  String?         @map("checkout_id") @db.Uuid
   orderId     String?         @map("order_id") @db.Uuid
+  bookingId   String?         @map("booking_id") @db.Uuid
   paymentId   String?         @map("payment_id") @db.Uuid
   refundId    String?         @map("refund_id") @db.Uuid
   sellerId    String?         @map("seller_id") @db.Uuid
@@ -731,6 +753,7 @@ model LedgerEntry {
 
   @@index([checkoutId])
   @@index([orderId])
+  @@index([bookingId])
   @@index([sellerId, type])
   @@map("ledger_entries")
 }
@@ -750,4 +773,191 @@ model AdminAuditLog {
 
   @@index([targetType, targetId])
   @@map("admin_audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Rentals
+// ---------------------------------------------------------------------------
+
+enum BookingStatus {
+  REQUESTED // waiting for the owner; dates held for 24 hours
+  APPROVED // waiting for the renter to pay; dates held until the payment deadline
+  CONFIRMED // paid: the dates are booked
+  ACTIVE // handed over to the renter
+  RETURNED // back with the owner; 48-hour inspection window
+  CLAIM_OPEN // the owner claimed damage; waiting for the renter
+  ADMIN_REVIEW // contested, unanswered or not returned: an admin decides
+  SETTLING // deductions fixed; the deposit refund is on its way
+  COMPLETED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum ClaimStatus {
+  OPEN
+  ACCEPTED
+  DISPUTED
+  NO_RESPONSE
+  DECIDED
+}
+
+// One rental of one listing for whole days (business time zone), start and end
+// inclusive. Paid bookings can never overlap: an exclusion constraint in the
+// migration refuses it. Amounts are paise, copied from the listing at request time.
+model RentalBooking {
+  id                   String        @id @default(uuid()) @db.Uuid
+  ref                  String        @unique
+  listingId            String        @map("listing_id") @db.Uuid
+  renterId             String        @map("renter_id") @db.Uuid
+  ownerId              String        @map("owner_id") @db.Uuid
+  status               BookingStatus @default(REQUESTED)
+  title                String
+  durationDays         Int           @map("duration_days")
+  startDate            DateTime      @map("start_date") @db.Date
+  endDate              DateTime      @map("end_date") @db.Date
+  fulfilment           Fulfilment
+  // Copy of the renter's delivery address; shown to the owner once paid.
+  deliveryAddress      Json?         @map("delivery_address")
+  // The exact pickup spot, copied when paid and shown to the renter from then on.
+  pickupLat            Float?        @map("pickup_lat")
+  pickupLng            Float?        @map("pickup_lng")
+  pickupLocality       String?       @map("pickup_locality")
+  feePaise             Int           @map("fee_paise")
+  depositPaise         Int           @map("deposit_paise")
+  deliveryChargePaise  Int           @map("delivery_charge_paise")
+  totalPaise           Int           @map("total_paise")
+  commissionPaise      Int           @map("commission_paise")
+  ownerPayablePaise    Int           @map("owner_payable_paise")
+  lateFeePerDayPaise   Int           @map("late_fee_per_day_paise")
+  // Running totals of processed refunds: fee and delivery, the fee part, the deposit.
+  refundedPaise        Int           @default(0) @map("refunded_paise")
+  feeRefundedPaise     Int           @default(0) @map("fee_refunded_paise")
+  depositRefundedPaise Int           @default(0) @map("deposit_refunded_paise")
+  // Worked out at return (late fee) and fixed at settlement, with what came out of
+  // the deposit and anything beyond it (I12).
+  lateFeePaise         Int?          @map("late_fee_paise")
+  damagePaise          Int?          @map("damage_paise")
+  depositDeductedPaise Int           @default(0) @map("deposit_deducted_paise")
+  owedPaise            Int           @default(0) @map("owed_paise")
+  holdExpiresAt        DateTime?     @map("hold_expires_at") @db.Timestamptz(3)
+  approvedAt           DateTime?     @map("approved_at") @db.Timestamptz(3)
+  paymentDueAt         DateTime?     @map("payment_due_at") @db.Timestamptz(3)
+  gatewayOrderId       String?       @unique @map("gateway_order_id")
+  paidAt               DateTime?     @map("paid_at") @db.Timestamptz(3)
+  // One-time codes: the renter shows the handover code, the owner shows the return code.
+  handoverCode         String?       @map("handover_code")
+  handoverAttempts     Int           @default(0) @map("handover_attempts")
+  returnCode           String?       @map("return_code")
+  returnAttempts       Int           @default(0) @map("return_attempts")
+  returnDueAt          DateTime      @map("return_due_at") @db.Timestamptz(3)
+  handedOverAt         DateTime?     @map("handed_over_at") @db.Timestamptz(3)
+  handoverPhotos       Json?         @map("handover_photos")
+  returnedAt           DateTime?     @map("returned_at") @db.Timestamptz(3)
+  returnPhotos         Json?         @map("return_photos")
+  inspectionEndsAt     DateTime?     @map("inspection_ends_at") @db.Timestamptz(3)
+  lateFeeDisputedAt    DateTime?     @map("late_fee_disputed_at") @db.Timestamptz(3)
+  nonReturnReportedAt  DateTime?     @map("non_return_reported_at") @db.Timestamptz(3)
+  remindedBeforeAt     DateTime?     @map("reminded_before_at") @db.Timestamptz(3)
+  remindedDueDayAt     DateTime?     @map("reminded_due_day_at") @db.Timestamptz(3)
+  overdueNotifiedAt    DateTime?     @map("overdue_notified_at") @db.Timestamptz(3)
+  settledAt            DateTime?     @map("settled_at") @db.Timestamptz(3)
+  completedAt          DateTime?     @map("completed_at") @db.Timestamptz(3)
+  cancelledAt          DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  createdAt            DateTime      @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  listing  Listing         @relation(fields: [listingId], references: [id])
+  renter   User            @relation("BookingRenter", fields: [renterId], references: [id])
+  owner    User            @relation("BookingOwner", fields: [ownerId], references: [id])
+  hold     RentalDateHold?
+  claim    RentalClaim?
+  events   BookingEvent[]
+  payments Payment[]
+  refunds  Refund[]
+
+  @@index([listingId, status])
+  @@index([renterId, createdAt])
+  @@index([ownerId, createdAt])
+  @@index([status])
+  @@map("rental_bookings")
+}
+
+// The dates a pending request keeps for itself (24 hours, then until the payment
+// deadline). Separate from bookings: a hold is released when the request is paid,
+// declined, cancelled or expires. Unreleased holds cannot overlap (exclusion constraint).
+model RentalDateHold {
+  id         String    @id @default(uuid()) @db.Uuid
+  listingId  String    @map("listing_id") @db.Uuid
+  bookingId  String    @unique @map("booking_id") @db.Uuid
+  startDate  DateTime  @map("start_date") @db.Date
+  endDate    DateTime  @map("end_date") @db.Date
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(3)
+  createdAt  DateTime  @map("created_at") @db.Timestamptz(3)
+
+  listing Listing       @relation(fields: [listingId], references: [id])
+  booking RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, releasedAt])
+  @@map("rental_date_holds")
+}
+
+// Days the owner has closed for renting.
+model RentalBlockedDate {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, endDate])
+  @@map("rental_blocked_dates")
+}
+
+// The owner's damage claim after a return (SPEC 13): description, itemised costs
+// and photos. The renter accepts or disputes within 48 hours; contested or
+// unanswered claims go to an admin.
+model RentalClaim {
+  id             String      @id @default(uuid()) @db.Uuid
+  bookingId      String      @unique @map("booking_id") @db.Uuid
+  description    String
+  // [{ label, amountPaise }]
+  items          Json
+  totalPaise     Int         @map("total_paise")
+  photos         Json
+  status         ClaimStatus @default(OPEN)
+  respondDueAt   DateTime    @map("respond_due_at") @db.Timestamptz(3)
+  renterResponse String?     @map("renter_response")
+  respondedAt    DateTime?   @map("responded_at") @db.Timestamptz(3)
+  decidedById    String?     @map("decided_by_id") @db.Uuid
+  decidedPaise   Int?        @map("decided_paise")
+  decisionReason String?     @map("decision_reason")
+  decidedAt      DateTime?   @map("decided_at") @db.Timestamptz(3)
+  createdAt      DateTime    @map("created_at") @db.Timestamptz(3)
+
+  booking RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("rental_claims")
+}
+
+// Append-only history of a booking: every change, who made it and why.
+model BookingEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  bookingId   String         @map("booking_id") @db.Uuid
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  actorRole   String         @map("actor_role")
+  action      String
+  fromStatus  BookingStatus? @map("from_status")
+  toStatus    BookingStatus? @map("to_status")
+  reason      String?
+  createdAt   DateTime       @map("created_at") @db.Timestamptz(3)
+
+  booking RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor   User?         @relation(fields: [actorUserId], references: [id])
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
 }

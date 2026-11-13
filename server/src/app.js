@@ -40,6 +40,13 @@ import {
   createMyListingsRouter,
   createSellerListingsRouter,
 } from './modules/listings/listings.routes.js';
+import {
+  createAdminRentalsRouter,
+  createBlockedDatesRouter,
+  createOwnerBookingsRouter,
+  createRenterBookingsRouter,
+  createRentalsRouter,
+} from './modules/rentals/rental.routes.js';
 import { createMeRouter, createUsersRouter } from './modules/users/users.routes.js';
 
 /**
@@ -120,6 +127,11 @@ export function createApp({
   api.use('/me/orders', createBuyerOrdersRouter(deps));
   api.use('/me/sales', createSellerOrdersRouter(deps));
   api.use('/admin/orders', createAdminOrdersRouter(deps));
+  api.use('/rentals', createRentalsRouter(deps));
+  api.use('/me/rentals', createRenterBookingsRouter(deps));
+  api.use('/me/rented-out', createOwnerBookingsRouter(deps));
+  api.use('/me/blocked-dates', createBlockedDatesRouter(deps));
+  api.use('/admin/rentals', createAdminRentalsRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));

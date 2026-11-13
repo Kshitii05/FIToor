@@ -2,6 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { ACCOUNT_PURGE_INTERVAL_MINUTES, ORDER_JOBS_INTERVAL_SECONDS } from '../config/policy.js';
 import { createRedisConnection } from '../lib/redis.js';
 import { runOrderJobs } from '../modules/orders/order.jobs.js';
+import { runRentalJobs } from '../modules/rentals/rental.jobs.js';
 import { purgeExpiredDeletions } from '../modules/users/deletion.service.js';
 
 const QUEUE_NAME = 'maintenance';
@@ -25,7 +26,8 @@ export async function startJobs(deps) {
     { every: ACCOUNT_PURGE_INTERVAL_MINUTES * 60 * 1000 },
     { name: PURGE_DELETED_ACCOUNTS, opts: { removeOnComplete: 50, removeOnFail: 200 } },
   );
-  // Checkout expiry, dispatch, receipt and issue deadlines, and refund retries.
+  // Checkout expiry, dispatch, receipt and issue deadlines, refund retries, and the
+  // rental deadlines (holds, payment window, return reminders, inspection, claims).
   await queue.upsertJobScheduler(
     ORDER_DEADLINES,
     { every: ORDER_JOBS_INTERVAL_SECONDS * 1000 },
@@ -40,7 +42,9 @@ export async function startJobs(deps) {
         if (purged > 0) logger.info(`Erased ${purged} account(s) past their recovery period`);
         return { purged };
       }
-      if (job.name === ORDER_DEADLINES) return runOrderJobs(deps);
+      if (job.name === ORDER_DEADLINES) {
+        return { orders: await runOrderJobs(deps), rentals: await runRentalJobs(deps) };
+      }
       throw new Error(`Unknown job: ${job.name}`);
     },
     { connection: workerConnection },

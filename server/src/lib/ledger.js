@@ -16,6 +16,7 @@ export async function recordLedger(tx, now, rows) {
       amountPaise: row.amountPaise,
       checkoutId: row.checkoutId ?? null,
       orderId: row.orderId ?? null,
+      bookingId: row.bookingId ?? null,
       paymentId: row.paymentId ?? null,
       refundId: row.refundId ?? null,
       sellerId: row.sellerId ?? null,
