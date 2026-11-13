@@ -21,6 +21,7 @@ export function Alert({ tone = 'info', title, children, className = '' }) {
 const BADGE_TONES = {
   success: 'bg-success-soft text-success',
   notice: 'bg-notice-soft text-notice',
+  danger: 'bg-danger-soft text-danger-strong',
   neutral: 'bg-paper text-muted border border-line',
 };
 
