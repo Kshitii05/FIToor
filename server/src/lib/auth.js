@@ -41,7 +41,7 @@ function readAccessToken(token, clock) {
  * Requires a valid access token whose session is still live and whose account is
  * active. Checking the session on every request means logout, password reset and
  * account deletion take effect immediately instead of when the token expires.
- * Sets `req.auth = { userId, sessionId }`.
+ * Sets `req.auth = { userId, sessionId, role, verified }`.
  */
 export function createRequireAuth({ db, clock }) {
   return async function requireAuth(req, _res, next) {
@@ -58,7 +58,9 @@ export function createRequireAuth({ db, clock }) {
         userId: true,
         revokedAt: true,
         expiresAt: true,
-        user: { select: { status: true, emailVerifiedAt: true, phoneVerifiedAt: true } },
+        user: {
+          select: { status: true, role: true, emailVerifiedAt: true, phoneVerifiedAt: true },
+        },
       },
     });
 
@@ -72,6 +74,7 @@ export function createRequireAuth({ db, clock }) {
 
     req.auth = {
       ...claims,
+      role: session.user.role,
       verified: session.user.emailVerifiedAt !== null && session.user.phoneVerifiedAt !== null,
     };
     next();
@@ -113,5 +116,14 @@ export function requireTrustedOrigin(req, _res, next) {
   if (origin && origin !== env.CLIENT_ORIGIN) {
     throw AppError.forbidden('Request origin not allowed');
   }
+  next();
+}
+
+/**
+ * Use after requireAuth. Admin routes check the role on the server for every
+ * request (SPEC Module 10); hiding admin screens is never enough.
+ */
+export function requireAdmin(req, _res, next) {
+  if (req.auth?.role !== 'ADMIN') throw AppError.forbidden('Admins only');
   next();
 }
