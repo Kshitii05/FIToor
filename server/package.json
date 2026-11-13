@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "migrate": "dotenv -e ../.env -- prisma migrate dev",
     "migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy",
-    "generate": "prisma generate"
+    "generate": "prisma generate",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

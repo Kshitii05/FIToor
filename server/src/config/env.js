@@ -32,6 +32,8 @@ const schema = z.object({
   CLOUDINARY_CLOUD_NAME: optionalString,
   CLOUDINARY_API_KEY: optionalString,
   CLOUDINARY_API_SECRET: optionalString,
+  // Development only: password given to the demo accounts made by the seed script.
+  SEED_USER_PASSWORD: optionalString,
 });
 
 const parsed = schema.safeParse(process.env);
