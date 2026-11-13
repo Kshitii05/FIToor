@@ -32,20 +32,39 @@ export const LISTING_CATEGORIES = [
 export const ITEM_CONDITIONS = ['NEW', 'GOOD', 'FAIR'];
 
 // Money is always whole paise. Fractions and numeric strings are rejected, not rounded.
-const paise = (min, max) => z.number().int().min(min).max(max);
+const rupees = (paiseValue) => `₹${(paiseValue / 100).toLocaleString('en-IN')}`;
+const paise = (min, max) => {
+  const message = `Enter an amount between ${rupees(min)} and ${rupees(max)}`;
+  return z.number(message).int(message).min(min, message).max(max, message);
+};
+
+/** A whole number within a range, with one plain message for every way it can be wrong. */
+const wholeNumber = (min, max, message) =>
+  z.number(message).int(message).min(min, message).max(max, message);
 const amountPaise = paise(LISTING_AMOUNT_MIN_PAISE, LISTING_AMOUNT_MAX_PAISE);
 
-const text = (min, max) => z.string().trim().min(min).max(max);
+const text = (min, max) => {
+  const message = min > 1 ? `Use between ${min} and ${max} characters` : 'This is required';
+  return z.string(message).trim().min(min, message).max(max, `Use at most ${max} characters`);
+};
 
 const deliverySchema = z.strictObject({
   chargePaise: paise(0, DELIVERY_CHARGE_MAX_PAISE),
-  radiusKm: z.number().int().min(DELIVERY_RADIUS_MIN_KM).max(DELIVERY_RADIUS_MAX_KM),
+  radiusKm: wholeNumber(
+    DELIVERY_RADIUS_MIN_KM,
+    DELIVERY_RADIUS_MAX_KM,
+    `Enter a distance between ${DELIVERY_RADIUS_MIN_KM} and ${DELIVERY_RADIUS_MAX_KM} km`,
+  ),
 });
 
 const packagesSchema = z
   .array(
     z.strictObject({
-      durationDays: z.number().int().min(1).max(RENTAL_PACKAGE_MAX_DAYS),
+      durationDays: wholeNumber(
+        1,
+        RENTAL_PACKAGE_MAX_DAYS,
+        `Enter between 1 and ${RENTAL_PACKAGE_MAX_DAYS} days`,
+      ),
       pricePaise: amountPaise,
     }),
   )
@@ -58,8 +77,8 @@ const packagesSchema = z
 const commonFields = {
   title: text(LISTING_TITLE_MIN_LENGTH, LISTING_TITLE_MAX_LENGTH),
   description: text(LISTING_DESCRIPTION_MIN_LENGTH, LISTING_DESCRIPTION_MAX_LENGTH),
-  category: z.enum(LISTING_CATEGORIES),
-  condition: z.enum(ITEM_CONDITIONS),
+  category: z.enum(LISTING_CATEGORIES, 'Choose a category'),
+  condition: z.enum(ITEM_CONDITIONS, 'Choose a condition'),
   brand: text(1, LISTING_BRAND_MAX_LENGTH),
   size: text(1, LISTING_SIZE_MAX_LENGTH),
   colour: text(1, LISTING_COLOUR_MAX_LENGTH),
@@ -70,7 +89,11 @@ const commonFields = {
 
 const saleFields = {
   pricePaise: amountPaise,
-  quantity: z.number().int().min(1).max(LISTING_QUANTITY_MAX),
+  quantity: wholeNumber(
+    1,
+    LISTING_QUANTITY_MAX,
+    `Enter a quantity between 1 and ${LISTING_QUANTITY_MAX}`,
+  ),
 };
 
 const rentFields = {
