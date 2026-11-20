@@ -4,6 +4,7 @@ import { AppError } from '../../lib/errors.js';
 import { pointSql } from '../../lib/geo.js';
 import { loadOwnAddress, toAddress } from '../addresses/addresses.js';
 import { fulfilmentOptions, loadCart } from '../cart/cart.js';
+import { acceptedOffers, priceFor } from '../messaging/offers.service.js';
 
 // Checkout: fixes prices from the database, reserves stock for 15 minutes (I4) and
 // opens a payment on the gateway. Paying it creates one order per seller (see
@@ -106,6 +107,14 @@ export async function createCheckout(deps, buyerId, choices) {
     throw AppError.badRequest('Choose delivery or pickup for each seller in your cart, once');
   }
 
+  // Accepted offers set the price per item; nothing from the browser does (I74).
+  const offers = await acceptedOffers(
+    db,
+    buyerId,
+    cart.map((row) => row.listing.id),
+    clock.now(),
+  );
+
   const groups = [];
   for (const [sellerId, rows] of bySeller) {
     const listings = rows.map((row) => row.listing);
@@ -163,7 +172,7 @@ export async function createCheckout(deps, buyerId, choices) {
       items: rows.map((row) => ({
         listingId: row.listing.id,
         quantity: row.quantity,
-        unitPricePaise: row.listing.pricePaise,
+        ...priceFor(row.listing, row.quantity, offers.get(row.listing.id)),
         title: row.listing.title,
       })),
     });

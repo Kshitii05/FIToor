@@ -19,6 +19,7 @@ export async function resetDb() {
   await db.$transaction([
     db.$executeRaw`SET LOCAL app.allow_record_deletion = 'on'`,
     db.$executeRaw`DELETE FROM ledger_entries`,
+    db.$executeRaw`DELETE FROM messages`,
     db.$executeRaw`DELETE FROM payment_events`,
     db.$executeRaw`DELETE FROM admin_audit_logs`,
     db.$executeRaw`DELETE FROM order_events`,
@@ -29,6 +30,8 @@ export async function resetDb() {
     db.$executeRaw`DELETE FROM orders`,
     db.$executeRaw`DELETE FROM payments`,
     db.$executeRaw`DELETE FROM checkouts`,
+    db.$executeRaw`DELETE FROM conversations`,
+    db.$executeRaw`DELETE FROM blocked_users`,
     db.$executeRaw`DELETE FROM rental_claims`,
     db.$executeRaw`DELETE FROM rental_date_holds`,
     db.$executeRaw`DELETE FROM rental_blocked_dates`,

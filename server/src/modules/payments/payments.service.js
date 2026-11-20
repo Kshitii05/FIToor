@@ -6,6 +6,7 @@ import { recordLedger } from '../../lib/ledger.js';
 import { commissionOn } from '../../lib/money.js';
 import { reserveStock } from '../checkout/checkout.service.js';
 import { notify } from '../orders/order.emails.js';
+import { useOffers } from '../messaging/offers.service.js';
 import { confirmBookingPayment } from '../rentals/rental.payments.js';
 import {
   createRefund,
@@ -220,6 +221,8 @@ export async function confirmPayment(deps, entity) {
 
     await tx.checkout.update({ where: { id: checkout.id }, data: { status: 'PAID', paidAt: now } });
     const orders = await createOrders(tx, now, checkout, payment);
+    // Offers this checkout was priced with are now used (I74).
+    await useOffers(tx, now, checkout.id);
     return { checkout, orders, refundIds: [] };
   });
 

@@ -60,14 +60,22 @@ model User {
   cartItems     CartItem[]
   addresses     Address[]
   checkouts     Checkout[]
-  sellerGroups  CheckoutGroup[]      @relation("CheckoutGroupSeller")
-  purchases     Order[]              @relation("OrderBuyer")
-  sales         Order[]              @relation("OrderSeller")
+  sellerGroups  CheckoutGroup[]           @relation("CheckoutGroupSeller")
+  purchases     Order[]                   @relation("OrderBuyer")
+  sales         Order[]                   @relation("OrderSeller")
   orderEvents   OrderEvent[]
   adminActions  AdminAuditLog[]
-  rentals       RentalBooking[]      @relation("BookingRenter")
-  rentedOut     RentalBooking[]      @relation("BookingOwner")
+  rentals       RentalBooking[]           @relation("BookingRenter")
+  rentedOut     RentalBooking[]           @relation("BookingOwner")
   bookingEvents BookingEvent[]
+  chatsAsA      Conversation[]            @relation("ConversationUserA")
+  chatsAsB      Conversation[]            @relation("ConversationUserB")
+  chatSeats     ConversationParticipant[]
+  sentMessages  Message[]
+  offersMade    PriceOffer[]              @relation("OfferBuyer")
+  offersGot     PriceOffer[]              @relation("OfferSeller")
+  blocking      BlockedUser[]             @relation("Blocker")
+  blockedBy     BlockedUser[]             @relation("Blocked")
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -237,6 +245,7 @@ model Listing {
   bookings      RentalBooking[]
   dateHolds     RentalDateHold[]
   blockedDates  RentalBlockedDate[]
+  offers        PriceOffer[]
 
   // Target of the rental package foreign key, which carries the mode.
   @@unique([id, mode])
@@ -545,17 +554,20 @@ model CheckoutGroup {
 }
 
 model CheckoutItem {
-  id             String @id @default(uuid()) @db.Uuid
-  checkoutId     String @map("checkout_id") @db.Uuid
-  groupId        String @map("group_id") @db.Uuid
-  listingId      String @map("listing_id") @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  checkoutId     String  @map("checkout_id") @db.Uuid
+  groupId        String  @map("group_id") @db.Uuid
+  listingId      String  @map("listing_id") @db.Uuid
   quantity       Int
-  unitPricePaise Int    @map("unit_price_paise")
+  unitPricePaise Int     @map("unit_price_paise")
   title          String
+  // The accepted offer whose price this item uses, if any (I74).
+  offerId        String? @map("offer_id") @db.Uuid
 
   checkout Checkout      @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
   group    CheckoutGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   listing  Listing       @relation(fields: [listingId], references: [id])
+  offer    PriceOffer?   @relation(fields: [offerId], references: [id])
 
   @@map("checkout_items")
 }
@@ -960,4 +972,150 @@ model BookingEvent {
 
   @@index([bookingId, createdAt])
   @@map("booking_events")
+}
+
+// ---------------------------------------------------------------------------
+// Messaging and offers
+// ---------------------------------------------------------------------------
+
+enum MessageKind {
+  TEXT
+  PHOTO
+  OFFER
+  SYSTEM
+}
+
+enum OfferStatus {
+  OPEN // waiting for the other side
+  ACCEPTED // agreed; the buyer can check out at this price until useBy
+  REJECTED
+  COUNTERED // replaced by a counter-offer
+  WITHDRAWN
+  EXPIRED
+  USED // paid for in a checkout
+}
+
+// One conversation per pair of people (SPEC Module 8). The two ids are stored in a
+// fixed order (a CHECK keeps user_a_id < user_b_id) so the pair is unique.
+model Conversation {
+  id            String   @id @default(uuid()) @db.Uuid
+  userAId       String   @map("user_a_id") @db.Uuid
+  userBId       String   @map("user_b_id") @db.Uuid
+  lastMessageAt DateTime @map("last_message_at") @db.Timestamptz(3)
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+
+  userA        User                      @relation("ConversationUserA", fields: [userAId], references: [id])
+  userB        User                      @relation("ConversationUserB", fields: [userBId], references: [id])
+  participants ConversationParticipant[]
+  messages     Message[]
+  offers       PriceOffer[]
+
+  @@unique([userAId, userBId])
+  @@map("conversations")
+}
+
+// Each person's place in a conversation: how far they have received and read.
+// Delivered and read ticks come from these marks (message sequence numbers).
+model ConversationParticipant {
+  conversationId String @map("conversation_id") @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+  deliveredUpTo  Int    @default(0) @map("delivered_up_to")
+  readUpTo       Int    @default(0) @map("read_up_to")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+// A message is never edited. `seq` orders messages across the whole table.
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  seq            Int         @unique @default(autoincrement())
+  conversationId String      @map("conversation_id") @db.Uuid
+  // Null for system lines ("Offer accepted").
+  senderId       String?     @map("sender_id") @db.Uuid
+  kind           MessageKind
+  body           String?
+  // What the message is about, if anything.
+  listingId      String?     @map("listing_id") @db.Uuid
+  orderId        String?     @map("order_id") @db.Uuid
+  bookingId      String?     @map("booking_id") @db.Uuid
+  offerId        String?     @map("offer_id") @db.Uuid
+  createdAt      DateTime    @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?               @relation(fields: [senderId], references: [id])
+  offer        PriceOffer?         @relation(fields: [offerId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, seq])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  url       String
+  storageId String   @map("storage_id")
+  position  Int
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, position])
+  @@map("message_attachments")
+}
+
+// A price offer on a sale listing. A counter-offer is a new row pointing at the one
+// it replaces, so the whole history is kept. A partial unique index allows one live
+// (open or accepted) offer per buyer and listing.
+model PriceOffer {
+  id              String      @id @default(uuid()) @db.Uuid
+  listingId       String      @map("listing_id") @db.Uuid
+  buyerId         String      @map("buyer_id") @db.Uuid
+  sellerId        String      @map("seller_id") @db.Uuid
+  conversationId  String      @map("conversation_id") @db.Uuid
+  // Who proposed this price: the buyer, or the seller in a counter-offer.
+  madeById        String      @map("made_by_id") @db.Uuid
+  previousOfferId String?     @unique @map("previous_offer_id") @db.Uuid
+  quantity        Int
+  unitPricePaise  Int         @map("unit_price_paise")
+  listPricePaise  Int         @map("list_price_paise")
+  status          OfferStatus @default(OPEN)
+  expiresAt       DateTime    @map("expires_at") @db.Timestamptz(3)
+  respondedAt     DateTime?   @map("responded_at") @db.Timestamptz(3)
+  acceptedAt      DateTime?   @map("accepted_at") @db.Timestamptz(3)
+  useBy           DateTime?   @map("use_by") @db.Timestamptz(3)
+  usedAt          DateTime?   @map("used_at") @db.Timestamptz(3)
+  createdAt       DateTime    @map("created_at") @db.Timestamptz(3)
+
+  listing       Listing        @relation(fields: [listingId], references: [id])
+  buyer         User           @relation("OfferBuyer", fields: [buyerId], references: [id])
+  seller        User           @relation("OfferSeller", fields: [sellerId], references: [id])
+  conversation  Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  previous      PriceOffer?    @relation("OfferChain", fields: [previousOfferId], references: [id])
+  next          PriceOffer?    @relation("OfferChain")
+  messages      Message[]
+  checkoutItems CheckoutItem[]
+
+  @@index([buyerId, listingId, status])
+  @@index([status, expiresAt])
+  @@map("price_offers")
+}
+
+// One person has blocked another. Either direction stops messages and offers (I75).
+model BlockedUser {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocked_users")
 }

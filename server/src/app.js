@@ -47,6 +47,12 @@ import {
   createRenterBookingsRouter,
   createRentalsRouter,
 } from './modules/rentals/rental.routes.js';
+import {
+  createBlocksRouter,
+  createConversationsRouter,
+  createOffersRouter,
+} from './modules/messaging/messaging.routes.js';
+import { createRealtimeHub } from './modules/messaging/realtime.js';
 import { createMeRouter, createUsersRouter } from './modules/users/users.routes.js';
 
 /**
@@ -105,6 +111,8 @@ export function createApp({
     limiters: createLimiters(rateLimiting),
     requireAuth,
     optionalAuth: createOptionalAuth(requireAuth),
+    // Live chat: sends nothing until a server attaches Socket.IO (server.js).
+    realtime: createRealtimeHub(),
   };
 
   // Scheduled jobs and tests reach the same dependencies the routes use.
@@ -132,6 +140,9 @@ export function createApp({
   api.use('/me/rented-out', createOwnerBookingsRouter(deps));
   api.use('/me/blocked-dates', createBlockedDatesRouter(deps));
   api.use('/admin/rentals', createAdminRentalsRouter(deps));
+  api.use('/conversations', createConversationsRouter(deps));
+  api.use('/offers', createOffersRouter(deps));
+  api.use('/blocks', createBlocksRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));

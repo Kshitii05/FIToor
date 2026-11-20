@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CART_ITEMS_MAX, LISTING_QUANTITY_MAX } from '../../config/policy.js';
 import { AppError } from '../../lib/errors.js';
 import { listingInclude, toListing } from '../listings/listings.service.js';
+import { acceptedOffers, priceFor } from '../messaging/offers.service.js';
 
 // The cart: sale listings a signed-in person means to buy, grouped by seller. It
 // holds no stock; stock is reserved only when checkout starts.
@@ -42,8 +43,18 @@ export async function loadCart(db, userId) {
   });
 }
 
-export async function cartView(db, userId) {
+export async function cartView(db, userId, now) {
   const rows = await loadCart(db, userId);
+  // An accepted offer sets the price, worked out here from the offer row (I74).
+  const offers = await acceptedOffers(
+    db,
+    userId,
+    rows.map((row) => row.listing.id),
+    now,
+  );
+  for (const row of rows) {
+    Object.assign(row, priceFor(row.listing, row.quantity, offers.get(row.listing.id)));
+  }
   const groups = new Map();
   for (const row of rows) {
     const sellerId = row.listing.sellerId;
@@ -54,7 +65,7 @@ export async function cartView(db, userId) {
   const view = [...groups.values()].map((items) => {
     const seller = items[0].listing.seller;
     const itemsSubtotalPaise = items.reduce(
-      (sum, row) => sum + row.listing.pricePaise * row.quantity,
+      (sum, row) => sum + row.unitPricePaise * row.quantity,
       0,
     );
     return {
@@ -65,6 +76,8 @@ export async function cartView(db, userId) {
       },
       items: items.map((row) => ({
         quantity: row.quantity,
+        unitPricePaise: row.unitPricePaise,
+        offerId: row.offerId,
         problem: problemWith(row.listing, row.quantity),
         listing: toListing(row.listing),
       })),
@@ -119,12 +132,12 @@ export function createCartRouter(deps) {
   router.use(deps.requireAuth);
 
   router.get('/', async (req, res) => {
-    res.json({ cart: await cartView(deps.db, req.auth.userId) });
+    res.json({ cart: await cartView(deps.db, req.auth.userId, deps.clock.now()) });
   });
 
   router.post('/items', async (req, res) => {
     await addItem(deps, req.auth.userId, addSchema.parse(req.body));
-    res.status(201).json({ cart: await cartView(deps.db, req.auth.userId) });
+    res.status(201).json({ cart: await cartView(deps.db, req.auth.userId, deps.clock.now()) });
   });
 
   router.patch('/items/:listingId', async (req, res) => {
@@ -135,13 +148,13 @@ export function createCartRouter(deps) {
     });
     if (!row) throw AppError.notFound('Not in your cart');
     await addItem(deps, req.auth.userId, { listingId, quantity });
-    res.json({ cart: await cartView(deps.db, req.auth.userId) });
+    res.json({ cart: await cartView(deps.db, req.auth.userId, deps.clock.now()) });
   });
 
   router.delete('/items/:listingId', async (req, res) => {
     const { listingId } = listingParams.parse(req.params);
     await deps.db.cartItem.deleteMany({ where: { userId: req.auth.userId, listingId } });
-    res.json({ cart: await cartView(deps.db, req.auth.userId) });
+    res.json({ cart: await cartView(deps.db, req.auth.userId, deps.clock.now()) });
   });
 
   return router;

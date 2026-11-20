@@ -77,7 +77,21 @@ export const RATE_LIMITS = Object.freeze({
   places: Object.freeze({ windowMinutes: 1, max: 30 }),
   checkout: Object.freeze({ windowMinutes: 15, max: 20 }),
   rental: Object.freeze({ windowMinutes: 15, max: 20 }),
+  // Messaging (I77): counted per person as well as per IP address.
+  message: Object.freeze({ windowMinutes: 1, max: 30 }),
+  offer: Object.freeze({ windowMinutes: 60, max: 10 }),
+  conversation: Object.freeze({ windowMinutes: 60, max: 20 }),
+  block: Object.freeze({ windowMinutes: 60, max: 30 }),
 });
+
+// Messaging and offers (SPEC Module 8; DECISIONS I68 to I78, PROVISIONAL)
+export const MESSAGE_MAX_LENGTH = 2000;
+export const MESSAGE_PHOTOS_MAX = 4;
+export const MESSAGES_PAGE_SIZE_DEFAULT = 30;
+export const MESSAGES_PAGE_SIZE_MAX = 100;
+export const OFFER_OPEN_HOURS = 48; // an offer or counter waits this long for an answer
+export const OFFER_USE_HOURS = 48; // an accepted offer can be checked out this long
+export const BLOCKS_MAX = 500;
 
 // Listings (SPEC Module 2; limits are DECISIONS I26 to I31, PROVISIONAL)
 export const LISTING_TITLE_MIN_LENGTH = 5;

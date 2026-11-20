@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { db } from './lib/db.js';
 import { closeRedis } from './lib/redis.js';
 import { startJobs } from './jobs/index.js';
+import { attachRealtime } from './modules/messaging/realtime.js';
 
 const logger = console;
 const app = createApp({ logger });
@@ -11,6 +12,8 @@ const app = createApp({ logger });
 const server = app.listen(env.PORT, () => {
   logger.info(`${APP_NAME} API listening on http://localhost:${env.PORT}`);
 });
+
+attachRealtime(server, app);
 
 const jobs = await startJobs(app.locals.deps);
 

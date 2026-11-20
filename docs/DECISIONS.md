@@ -87,6 +87,17 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I65 | Inspection, claims and settlement | The owner has 48 hours after the return to confirm it is fine or file a claim (description, 1–10 itemised costs, 1–8 photos). With neither, the deposit less any late fee is refunded automatically, once. The renter has 48 hours to accept or dispute a claim; disputed or unanswered claims go to an admin, who sets the damage and late fee to deduct. Deductions stop at the deposit; any excess is recorded as owed (I12). Late fees and damage go to the owner with no commission. | PROVISIONAL |
 | I66 | Rental payments and ledger | Fee, deposit and delivery are paid in one gateway payment after approval and recorded apart: the deposit as "deposit collected", never as revenue; the deposit comes back as a partial refund. Commission is 10% of the fee only. Deposit collected = deposit refunded + deposit deducted. A payment that arrives after the booking expired or was cancelled, or a second payment, is refunded in full; the booking is not revived. Whether Razorpay supports this deposit flow in production is a verification gate (SPEC 17). | PROVISIONAL |
 | I67 | Rental payout eligibility | A rental is payout-eligible when it is completed: the deposit settled and refunded with nothing open (I10). Accounts with unfinished rentals cannot be deleted (I16). | PROVISIONAL |
+| I68 | Starting a chat | A conversation starts from a listing, an order or a rental booking the person is part of; never with oneself. Sending messages and offers needs a verified account (I18). One conversation per pair of people. | PROVISIONAL |
+| I69 | Delivered and read ticks | Each person has a delivered mark and a read mark (message sequence numbers). Opening a chat marks its messages delivered; the app reports reading. Marks only move forward. | PROVISIONAL |
+| I70 | Message size and photos | Up to 2,000 characters of text and up to 4 photos (JPEG, PNG or WebP, 5 MB each) per message. A message can carry a listing link. Messages are never edited or deleted. | PROVISIONAL |
+| I71 | Who can offer | Offers are on sale listings only (rental prices are the owner's packages). The price per item must be from ₹1 to below the listed price; the quantity no more than is in stock. | PROVISIONAL |
+| I72 | Offer timing | An open offer or counter waits 48 hours for an answer, then expires. An accepted offer can be used at checkout for 48 hours after acceptance. | PROVISIONAL |
+| I73 | Offer history | One live (open or accepted) offer per buyer and listing, enforced by the database. A counter is a new offer that replaces the one it answers; the chain is kept. Only the side an offer waits on can accept, reject or counter; only its maker can withdraw it. | PROVISIONAL |
+| I74 | Offers at checkout | An accepted offer sets that buyer's price per item for that listing when the cart quantity is no more than the agreed quantity; otherwise the listed price applies. The server reads the price from the offer row. A paid checkout marks the offer used. Accepting does not reserve stock. Commission is 10% of the accepted price (I8). | PROVISIONAL |
+| I75 | Blocking | Either person blocking the other stops messages and offers both ways and withdraws open offers between them. Chat history stays readable. Up to 500 blocks per person. Reporting comes in Step 8. | PROVISIONAL |
+| I76 | Contact details in chat | Chat never shows phone numbers or emails. Phone numbers (10 or more digits) and email addresses typed into a message are stored as [hidden] unless the two people already have a paid order or rental between them. | PROVISIONAL |
+| I77 | Messaging rate limits | Counted per person and per IP address: 30 messages a minute, 10 offers or counters an hour, 20 new chats an hour, 30 blocks an hour. | PROVISIONAL |
+| I78 | Live chat servers | Socket.IO runs in the single API process in the MVP. Connections need a valid access token, checked like an API request. Running several processes needs a shared adapter (Redis), a Step 11 item. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -108,6 +119,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-20 — Added I68–I78 while building messaging and offers (Module 8).
 - 2026-11-13 — Added I59–I67 while building rentals, deposits, returns and inspection (Module 4).
 - 2026-11-13 — Added I47–I58 while building cart, checkout, payments and orders (Module 3).
 - 2026-11-13 — Added I39–I46 while building location discovery (Module 5).
