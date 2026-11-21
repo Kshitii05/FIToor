@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
+import { MessageButton } from '../components/chat/MessageButton.jsx';
 import { PointMap } from '../components/map/Maps.jsx';
 import { AddressBlock } from '../components/orders/OrderParts.jsx';
 import {
@@ -402,6 +403,11 @@ export default function RenterBookingPage() {
               {booking.owner.displayName}
               {booking.owner.phone ? ` · ${booking.owner.phone}` : ''}
             </p>
+            <div className="mt-2">
+              <MessageButton about={{ bookingId: booking.id }} size="sm">
+                Message owner
+              </MessageButton>
+            </div>
           </div>
         </div>
       </Card>

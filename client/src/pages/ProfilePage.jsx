@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { SavedPlaces } from '../components/map/SavedPlaces.jsx';
+import { BlockedPeople } from '../components/chat/BlockedPeople.jsx';
 import { SavedAddresses } from '../components/orders/Addresses.jsx';
 import { TextLink } from '../components/layout/AppLayout.jsx';
 import {
@@ -319,6 +320,7 @@ export default function ProfilePage() {
         <AccountDetails />
         <SavedAddresses />
         <SavedPlaces />
+        <BlockedPeople />
         <NotificationPreferences />
         <SignOut />
         <DeleteAccount />

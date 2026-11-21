@@ -5,6 +5,7 @@ import App from './App.jsx';
 import 'leaflet/dist/leaflet.css';
 import { AuthProvider } from './auth/AuthProvider.jsx';
 import { CartProvider } from './cart/CartProvider.jsx';
+import { ChatProvider } from './chat/ChatProvider.jsx';
 import { OriginProvider } from './location/OriginProvider.jsx';
 import './index.css';
 
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <OriginProvider>
           <CartProvider>
-            <App />
+            <ChatProvider>
+              <App />
+            </ChatProvider>
           </CartProvider>
         </OriginProvider>
       </AuthProvider>

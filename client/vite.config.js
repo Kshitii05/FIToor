@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': `http://localhost:${env.PORT || 4000}`,
+        // Live chat (Socket.IO) runs on the API server.
+        '/socket.io': { target: `http://localhost:${env.PORT || 4000}`, ws: true },
       },
     },
   };

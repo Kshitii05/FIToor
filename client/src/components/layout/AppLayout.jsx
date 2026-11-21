@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/authContext.js';
 import { useCart } from '../../cart/cartContext.js';
+import { useChat } from '../../chat/chatContext.js';
 import { APP_NAME, APP_TAGLINE } from '../../config/app.js';
 import { SearchBox } from '../search/SearchBox.jsx';
 import { ButtonLink, Loading } from '../ui/index.js';
@@ -46,7 +47,39 @@ function CartLink() {
   );
 }
 
+const CHAT_ICON = (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
+    <path
+      d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+function MessagesLink() {
+  const { unread } = useChat();
+  return (
+    <NavLink
+      to="/messages"
+      className={(state) => `relative ${navLinkClass(state)}`}
+      aria-label={unread ? `Messages, ${unread} unread` : 'Messages'}
+      title="Messages"
+    >
+      {CHAT_ICON}
+      {unread ? (
+        <span className="absolute -right-0.5 -top-0.5 flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-xs font-semibold leading-5 text-white">
+          {unread > 99 ? '99+' : unread}
+        </span>
+      ) : null}
+    </NavLink>
+  );
+}
+
 const MENU_LINKS = [
+  ['/messages', 'Messages'],
   ['/orders', 'My orders'],
   ['/sales', 'My sales'],
   ['/rentals', 'My rentals'],
@@ -100,9 +133,17 @@ function AccountMenu() {
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((value) => !value)}
-        className="flex min-h-9 max-w-40 items-center gap-1 rounded-field px-2.5 text-sm font-medium text-ink hover:bg-accent-soft"
+        aria-label={`Account menu for ${user.profile.displayName}`}
+        className="flex min-h-9 max-w-40 items-center gap-1 rounded-field px-1.5 text-sm font-medium text-ink hover:bg-accent-soft sm:px-2.5"
       >
-        <span className="truncate">{user.profile.displayName}</span>
+        {/* Phones show the initial so the header fits; wider screens show the name. */}
+        <span
+          aria-hidden="true"
+          className="flex size-7 items-center justify-center rounded-full bg-accent-soft font-display font-semibold text-accent-strong sm:hidden"
+        >
+          {user.profile.displayName[0]?.toUpperCase()}
+        </span>
+        <span className="hidden truncate sm:inline">{user.profile.displayName}</span>
         <span aria-hidden="true">▾</span>
       </button>
       {open ? (
@@ -158,6 +199,7 @@ function AccountNav() {
 
   return (
     <>
+      <MessagesLink />
       <CartLink />
       <ButtonLink to="/listings/new" size="sm">
         <span className="hidden sm:inline">List an item</span>
@@ -186,7 +228,7 @@ export function AppLayout() {
       </a>
 
       <header className="border-b border-line bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
           <Link
             to="/"
             className="shrink-0 font-display text-2xl font-semibold tracking-tight text-ink"

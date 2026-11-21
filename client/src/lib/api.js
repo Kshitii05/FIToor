@@ -44,6 +44,9 @@ export function setAccessToken(token) {
   setSessionHint(token !== null);
 }
 
+/** The current access token, for the live chat connection (it lives only in memory). */
+export const getAccessToken = () => accessToken;
+
 /** Called when a signed-in request finds the session gone and it cannot be renewed. */
 export function setSessionLostHandler(handler) {
   onSessionLost = handler;

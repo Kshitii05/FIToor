@@ -37,8 +37,13 @@ function ItemRow({ item, onChange, busy }) {
           {listing.title}
         </Link>
         <p className="text-sm text-muted">
-          {formatPaise(listing.sale.pricePaise)}
+          {formatPaise(item.unitPricePaise)}
           {item.quantity > 1 ? ` × ${item.quantity}` : ''}
+          {item.offerId ? (
+            <span className="ml-2 font-medium text-success">
+              your offer price (listed {formatPaise(listing.sale.pricePaise)})
+            </span>
+          ) : null}
         </p>
         {item.problem ? (
           <p role="alert" className="text-sm font-medium text-danger">

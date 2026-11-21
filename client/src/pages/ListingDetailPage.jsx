@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { LikeButton } from '../components/listings/LikeButton.jsx';
 import { AddToCart } from '../components/orders/AddToCart.jsx';
+import { ContactSeller } from '../components/chat/MakeOffer.jsx';
 import { ClosedDates } from '../components/rentals/ClosedDates.jsx';
 import { RentPanel } from '../components/rentals/RentPanel.jsx';
 import { StatusBadge } from '../components/listings/ListingCard.jsx';
@@ -354,6 +355,7 @@ export default function ListingDetailPage() {
           {listing.sale ? <SalePricing sale={listing.sale} /> : <RentPricing rent={listing.rent} />}
 
           {isOwner ? null : <AddToCart key={listing.id} listing={listing} />}
+          {isOwner ? null : <ContactSeller key={`contact-${listing.id}`} listing={listing} />}
           {listing.mode === 'RENT' && !isOwner ? (
             <RentPanel key={`rent-${listing.id}`} listing={listing} />
           ) : null}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { MessageButton } from '../components/chat/MessageButton.jsx';
 import { AddressBlock } from '../components/orders/OrderParts.jsx';
 import {
   BookingDates,
@@ -371,6 +372,11 @@ export default function OwnerBookingPage() {
               {booking.renter.displayName}
               {booking.renter.phone ? ` · ${booking.renter.phone}` : ''}
             </p>
+            <div className="mt-2">
+              <MessageButton about={{ bookingId: booking.id }} size="sm">
+                Message renter
+              </MessageButton>
+            </div>
           </div>
         </div>
       </Card>

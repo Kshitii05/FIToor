@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { MessageButton } from '../components/chat/MessageButton.jsx';
 import { PointMap } from '../components/map/Maps.jsx';
 import {
   AddressBlock,
@@ -365,6 +366,11 @@ export default function BuyerOrderPage() {
               {order.seller.displayName}
               {order.seller.phone ? ` · ${order.seller.phone}` : ''}
             </p>
+            <div className="mt-2">
+              <MessageButton about={{ orderId: order.id }} size="sm">
+                Message seller
+              </MessageButton>
+            </div>
           </div>
         </div>
       </Card>
