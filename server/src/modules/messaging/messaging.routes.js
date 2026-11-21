@@ -23,6 +23,7 @@ import {
   sendMessage,
   startConversation,
   unblockUser,
+  unreadCount,
 } from './messaging.service.js';
 import {
   acceptOffer,
@@ -106,6 +107,9 @@ export function createConversationsRouter(deps) {
       res.json({ conversation: await startConversation(deps, req.auth.userId, about) });
     },
   );
+  router.get('/unread-count', async (req, res) => {
+    res.json({ count: await unreadCount(deps, req.auth.userId) });
+  });
   router.get('/:id', async (req, res) => {
     res.json({ conversation: await conversationView(db, await mine(req), req.auth.userId) });
   });

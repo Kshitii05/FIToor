@@ -243,6 +243,17 @@ export async function startConversation(deps, me, about) {
   return conversationView(db, conversation, me);
 }
 
+/** How many messages from others this person has not read, across all chats. */
+export async function unreadCount({ db }, me) {
+  const [{ count }] = await db.$queryRaw`
+    SELECT count(*)::int AS count
+      FROM messages m
+      JOIN conversation_participants p
+        ON p.conversation_id = m.conversation_id AND p.user_id = ${me}::uuid
+     WHERE m.seq > p.read_up_to AND (m.sender_id IS NULL OR m.sender_id <> ${me}::uuid)`;
+  return count;
+}
+
 export async function listConversations({ db }, me, query) {
   const where = { OR: [{ userAId: me }, { userBId: me }] };
   const [rows, total] = await Promise.all([

@@ -210,6 +210,15 @@ describe('messages', () => {
     const mine = (await request(ctx.app).get(`${API}/conversations`).set(seller.bearer)).body
       .items[0];
     expect(mine.unreadCount).toBe(0);
+    const total = await request(ctx.app)
+      .get(`${API}/conversations/unread-count`)
+      .set(seller.bearer);
+    expect(total.body.count).toBe(0);
+    await sendMessage(ctx, buyer, conversation.id, { body: 'Still there?' });
+    expect(
+      (await request(ctx.app).get(`${API}/conversations/unread-count`).set(seller.bearer)).body
+        .count,
+    ).toBe(1);
   });
 });
 
