@@ -348,11 +348,18 @@ describe('money adds up', () => {
       .set(third.buyer.bearer)
       .field('data', JSON.stringify({ kind: 'DAMAGED', description: 'Button missing.' }))
       .attach('photos', PNG, 'photo.png');
-    await adminAction(ctx, admin, third.order.id, 'resolve-issue', {
-      resolution: 'PARTIAL_REFUND',
+    const dispute = await db.dispute.findFirstOrThrow({ where: { orderId: third.order.id } });
+    const decided = await adminDispute(ctx, admin, dispute.id, 'decide', {
+      outcome: 'PARTIAL_REFUND',
       refundPaise: 33333,
       reason: 'Missing button, partial refund',
     });
+    expect(decided.status).toBe(200);
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    expect((await db.order.findUnique({ where: { id: third.order.id } })).refundedPaise).toBe(
+      33333,
+    );
 
     const t = await ledgerTotals({});
     expect(t.BUYER_PAYMENT).toBe(t.COMMISSION + t.SELLER_PAYABLE);
