@@ -186,7 +186,13 @@ describe('erasing after the recovery period', () => {
 
     const row = await db.user.findUnique({
       where: { id: account.user.id },
-      include: { profile: true, preferences: true, verifications: true, sessions: true },
+      include: {
+        profile: true,
+        notifications: true,
+        notificationPreferences: true,
+        verifications: true,
+        sessions: true,
+      },
     });
     expect(row.status).toBe('DELETED');
     expect(row.deletedAt).toEqual(ctx.clock.now());
@@ -198,7 +204,8 @@ describe('erasing after the recovery period', () => {
       photoUrl: null,
       locality: null,
     });
-    expect(row.preferences).toBeNull();
+    expect(row.notifications).toEqual([]);
+    expect(row.notificationPreferences).toEqual([]);
     expect(row.verifications).toEqual([]);
     expect(row.sessions).toEqual([]);
     expect(JSON.stringify(row)).not.toContain(account.details.email);

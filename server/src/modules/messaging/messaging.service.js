@@ -1,7 +1,13 @@
-import { BLOCKS_MAX, MESSAGE_PHOTOS_MAX, MESSAGES_PAGE_SIZE_DEFAULT } from '../../config/policy.js';
+import {
+  BLOCKS_MAX,
+  MESSAGE_NOTIFY_INTERVAL_MINUTES,
+  MESSAGE_PHOTOS_MAX,
+  MESSAGES_PAGE_SIZE_DEFAULT,
+} from '../../config/policy.js';
 import { AppError } from '../../lib/errors.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
 import { discardStored, readImages, storeImages } from '../listings/listings.service.js';
+import { deliver } from '../notifications/notifications.service.js';
 
 // Messaging (SPEC Module 8). One conversation per pair of people; messages are never
 // edited. Live delivery goes through `deps.realtime` (realtime.js), which does
@@ -387,7 +393,43 @@ export async function sendMessage(deps, me, conversation, { body, listingId }, f
     await discardStored(deps, stored);
     throw error;
   }
-  return announceMessage(deps, conversation, message.id);
+  const view = await announceMessage(deps, conversation, message.id);
+  await notifyNewMessage(deps, conversation, me, view);
+  return view;
+}
+
+/**
+ * Tells the other person about a new message, unless they have the chat open. At
+ * most one notification per chat every 30 minutes (I96): the key names the
+ * 30-minute period, so later messages in the same period add nothing.
+ */
+async function notifyNewMessage(deps, conversation, senderId, message) {
+  const recipient = otherOf(conversation, senderId);
+  if (await deps.realtime.isViewing(conversation.id, recipient)) return;
+  const period = Math.floor(
+    deps.clock.now().getTime() / (MESSAGE_NOTIFY_INTERVAL_MINUTES * 60 * 1000),
+  );
+  const sender = await deps.db.user.findUnique({
+    where: { id: senderId },
+    select: { profile: { select: { displayName: true } } },
+  });
+  const name = sender?.profile?.displayName ?? 'Someone';
+  const preview = message.body
+    ? message.body.length > 120
+      ? `${message.body.slice(0, 117)}...`
+      : message.body
+    : message.attachments.length
+      ? 'Sent a photo'
+      : 'Shared a listing';
+  await deliver(deps, {
+    userId: recipient,
+    key: `message:${conversation.id}:${recipient}:${period}`,
+    category: 'MESSAGES',
+    type: 'newMessage',
+    title: `New message from ${name}`,
+    body: preview,
+    link: `/messages/${conversation.id}`,
+  });
 }
 
 /** A page of messages, oldest first, before `before` (a sequence number). */

@@ -10,6 +10,7 @@ import { db as defaultDb } from './lib/db.js';
 import { createErrorHandler, notFoundHandler } from './lib/errors.js';
 import { createImageStorage, LOCAL_UPLOADS_ROUTE } from './lib/imageStorage.js';
 import { createPaymentGateway } from './lib/paymentGateway.js';
+import { createInlineEmailQueue } from './lib/emailQueue.js';
 import { createEmailSender } from './lib/mailer.js';
 import { createOtpSender } from './lib/otpSender.js';
 import { createLimiters } from './lib/rateLimit.js';
@@ -54,6 +55,10 @@ import {
 } from './modules/messaging/messaging.routes.js';
 import { createRealtimeHub } from './modules/messaging/realtime.js';
 import {
+  createNotificationPreferencesRouter,
+  createNotificationsRouter,
+} from './modules/notifications/notifications.routes.js';
+import {
   createAdminDisputesRouter,
   createDisputesRouter,
 } from './modules/disputes/disputes.routes.js';
@@ -78,6 +83,8 @@ export function createApp({
   clock = systemClock,
   logger = console,
   emailSender = createEmailSender({ logger }),
+  // Notification emails: a BullMQ queue in the server (server.js), sent at once otherwise.
+  emailQueue = createInlineEmailQueue({ emailSender, logger }),
   otpSender = createOtpSender({ logger }),
   imageStorage = createImageStorage(),
   placeLookup = createPlaceLookup({ logger }),
@@ -115,6 +122,7 @@ export function createApp({
     clock,
     logger,
     emailSender,
+    emailQueue,
     otpSender,
     imageStorage,
     placeLookup,
@@ -155,6 +163,8 @@ export function createApp({
   api.use('/offers', createOffersRouter(deps));
   api.use('/blocks', createBlocksRouter(deps));
   api.use('/disputes', createDisputesRouter(deps));
+  api.use('/notifications', createNotificationsRouter(deps));
+  api.use('/me/notification-preferences', createNotificationPreferencesRouter(deps));
   api.use('/admin/disputes', createAdminDisputesRouter(deps));
   api.use('/reviews', createReviewsRouter(deps));
   api.use('/me/reviews', createMyReviewsRouter(deps));

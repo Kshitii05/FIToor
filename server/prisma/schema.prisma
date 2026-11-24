@@ -47,41 +47,42 @@ model User {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  profile       UserProfile?
-  preferences   UserPreferences?
-  verifications UserVerification[]
-  sessions      UserSession[]
-  listings      Listing[]
-  listingEvents ListingStatusEvent[]
-  likes         ListingLike[]
-  views         ListingView[]
-  searches      SearchHistory[]
-  locations     SavedLocation[]
-  cartItems     CartItem[]
-  addresses     Address[]
-  checkouts     Checkout[]
-  sellerGroups  CheckoutGroup[]           @relation("CheckoutGroupSeller")
-  purchases     Order[]                   @relation("OrderBuyer")
-  sales         Order[]                   @relation("OrderSeller")
-  orderEvents   OrderEvent[]
-  adminActions  AdminAuditLog[]
-  rentals       RentalBooking[]           @relation("BookingRenter")
-  rentedOut     RentalBooking[]           @relation("BookingOwner")
-  bookingEvents BookingEvent[]
-  chatsAsA      Conversation[]            @relation("ConversationUserA")
-  chatsAsB      Conversation[]            @relation("ConversationUserB")
-  chatSeats     ConversationParticipant[]
-  sentMessages  Message[]
-  offersMade    PriceOffer[]              @relation("OfferBuyer")
-  offersGot     PriceOffer[]              @relation("OfferSeller")
-  blocking      BlockedUser[]             @relation("Blocker")
-  blockedBy     BlockedUser[]             @relation("Blocked")
-  claimsMade    Dispute[]                 @relation("DisputeClaimant")
-  claimsAgainst Dispute[]                 @relation("DisputeRespondent")
-  evidence      DisputeEvidence[]
-  reviewsGiven  Review[]                  @relation("ReviewAuthor")
-  reviewsGot    Review[]                  @relation("ReviewSubject")
-  reports       Report[]
+  profile                 UserProfile?
+  verifications           UserVerification[]
+  sessions                UserSession[]
+  listings                Listing[]
+  listingEvents           ListingStatusEvent[]
+  likes                   ListingLike[]
+  views                   ListingView[]
+  searches                SearchHistory[]
+  locations               SavedLocation[]
+  cartItems               CartItem[]
+  addresses               Address[]
+  checkouts               Checkout[]
+  sellerGroups            CheckoutGroup[]           @relation("CheckoutGroupSeller")
+  purchases               Order[]                   @relation("OrderBuyer")
+  sales                   Order[]                   @relation("OrderSeller")
+  orderEvents             OrderEvent[]
+  adminActions            AdminAuditLog[]
+  rentals                 RentalBooking[]           @relation("BookingRenter")
+  rentedOut               RentalBooking[]           @relation("BookingOwner")
+  bookingEvents           BookingEvent[]
+  chatsAsA                Conversation[]            @relation("ConversationUserA")
+  chatsAsB                Conversation[]            @relation("ConversationUserB")
+  chatSeats               ConversationParticipant[]
+  sentMessages            Message[]
+  offersMade              PriceOffer[]              @relation("OfferBuyer")
+  offersGot               PriceOffer[]              @relation("OfferSeller")
+  blocking                BlockedUser[]             @relation("Blocker")
+  blockedBy               BlockedUser[]             @relation("Blocked")
+  claimsMade              Dispute[]                 @relation("DisputeClaimant")
+  claimsAgainst           Dispute[]                 @relation("DisputeRespondent")
+  evidence                DisputeEvidence[]
+  reviewsGiven            Review[]                  @relation("ReviewAuthor")
+  reviewsGot              Review[]                  @relation("ReviewSubject")
+  reports                 Report[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@index([status, deletionScheduledFor])
   @@map("users")
@@ -99,17 +100,6 @@ model UserProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_profiles")
-}
-
-model UserPreferences {
-  userId             String   @id @map("user_id") @db.Uuid
-  emailNotifications Boolean  @default(true) @map("email_notifications")
-  inAppNotifications Boolean  @default(true) @map("in_app_notifications")
-  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_preferences")
 }
 
 // One row per one-time code sent. Only the newest row for a user, channel and
@@ -1247,4 +1237,62 @@ model Report {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("reports")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationCategory {
+  ORDERS // critical
+  RENTALS // critical
+  PAYMENTS // critical
+  DISPUTES // critical
+  MESSAGES
+  OFFERS
+  REVIEWS
+}
+
+// Every notification, saved before it is shown or emailed (I91). `key` names the
+// event ("booking:<id>:returnTomorrow:renter") and is unique, so an event can never
+// be notified twice; the email job uses the same key as its job id (I92). A row is
+// kept even when the person turned the in-app channel off (inApp false), so the key
+// still guards the email.
+model Notification {
+  id        String               @id @default(uuid()) @db.Uuid
+  key       String               @unique
+  userId    String               @map("user_id") @db.Uuid
+  category  NotificationCategory
+  type      String
+  critical  Boolean
+  inApp     Boolean              @default(true) @map("in_app")
+  title     String
+  body      String
+  link      String?
+  data      Json?
+  readAt    DateTime?            @map("read_at") @db.Timestamptz(3)
+  emailedAt DateTime?            @map("emailed_at") @db.Timestamptz(3)
+  createdAt DateTime             @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, inApp, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([readAt, createdAt])
+  @@map("notifications")
+}
+
+// A person's choice for one optional category (I95). Critical categories have no
+// row: they are always on (SPEC Module 9).
+model NotificationPreference {
+  userId    String               @map("user_id") @db.Uuid
+  category  NotificationCategory
+  inApp     Boolean              @default(true) @map("in_app")
+  email     Boolean              @default(true)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, category])
+  @@map("notification_preferences")
 }

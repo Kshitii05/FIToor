@@ -5,6 +5,7 @@ import { runOrderJobs } from '../modules/orders/order.jobs.js';
 import { runRentalJobs } from '../modules/rentals/rental.jobs.js';
 import { runOfferJobs } from '../modules/messaging/offers.service.js';
 import { runDisputeJobs } from '../modules/disputes/disputes.service.js';
+import { runNotificationJobs } from '../modules/notifications/notifications.service.js';
 import { purgeExpiredDeletions } from '../modules/users/deletion.service.js';
 
 const QUEUE_NAME = 'maintenance';
@@ -51,6 +52,7 @@ export async function startJobs(deps) {
           rentals: await runRentalJobs(deps),
           offers: await runOfferJobs(deps),
           disputes: await runDisputeJobs(deps),
+          notifications: await runNotificationJobs(deps),
         };
       }
       throw new Error(`Unknown job: ${job.name}`);

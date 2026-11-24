@@ -32,6 +32,12 @@ export function createRealtimeHub() {
     setServer(server) {
       io = server;
     },
+    /** Whether this person has the chat open right now. */
+    async isViewing(conversationId, userId) {
+      if (!io) return false;
+      const sockets = await io.in(conversationRoom(conversationId)).fetchSockets();
+      return sockets.some((socket) => socket.data.auth?.userId === userId);
+    },
     /** Sends `event` to every live connection of these people. */
     toUsers(userIds, event, payload) {
       if (!io) return;

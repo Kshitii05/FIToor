@@ -1,8 +1,9 @@
 import { APP_NAME } from '../../config/app.js';
 import { BUSINESS_TIME_ZONE } from '../../config/policy.js';
+import { deliver, plainTitle } from '../notifications/notifications.service.js';
 
-// Dispute emails. The spec asks for an acknowledgement within 24 hours (SPEC 15):
-// the opener hears at once. In-app notifications arrive with Step 9.
+// Dispute notifications. The spec asks for an acknowledgement within 24 hours (SPEC 15):
+// the opener hears at once, in the app and by email.
 
 const when = new Intl.DateTimeFormat('en-IN', {
   timeZone: BUSINESS_TIME_ZONE,
@@ -50,19 +51,21 @@ const messages = {
   }),
 };
 
-/** Emails one side of a dispute ('claimant' or 'respondent'). Failures are only logged. */
+/** Notifies one side of a dispute ('claimant' or 'respondent'). Keyed by event and side. */
 export async function notifyDispute(deps, dispute, side, kind) {
-  const { db, emailSender, logger } = deps;
-  try {
-    const user = await db.user.findUnique({
-      where: { id: side === 'claimant' ? dispute.claimantId : dispute.respondentId },
-      select: { email: true, status: true },
-    });
-    if (!user || user.status === 'DELETED') return;
-    await emailSender.send({ to: user.email, ...messages[kind](dispute) });
-  } catch (error) {
-    logger.error(error);
-  }
+  const { subject, text } = messages[kind](dispute);
+  // Evidence can be added many times; each addition is its own notification.
+  const repeat = kind === 'evidenceAdded' ? `:${deps.clock.now().getTime()}` : '';
+  await deliver(deps, {
+    userId: side === 'claimant' ? dispute.claimantId : dispute.respondentId,
+    key: `dispute:${dispute.id}:${kind}:${side}${repeat}`,
+    category: 'DISPUTES',
+    type: kind,
+    title: plainTitle(subject),
+    body: text,
+    link: `/disputes/${dispute.id}`,
+    email: { subject, text },
+  });
 }
 
 export const notifyBoth = async (deps, dispute, kind) => {

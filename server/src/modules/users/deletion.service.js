@@ -149,7 +149,8 @@ export async function purgeExpiredDeletions({ db, clock }) {
         where: { userId: id },
         data: { displayName: 'Deleted user', bio: null, photoUrl: null, locality: null },
       });
-      await tx.userPreferences.deleteMany({ where: { userId: id } });
+      await tx.notificationPreference.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
       await tx.userVerification.deleteMany({ where: { userId: id } });
       await tx.userSession.deleteMany({ where: { userId: id } });
       // Their listings leave the marketplace; the rows stay for past transactions.

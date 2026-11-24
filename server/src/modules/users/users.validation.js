@@ -22,14 +22,6 @@ export const updateProfileSchema = z
   .partial()
   .refine(atLeastOneField, { message: 'Provide at least one field to update' });
 
-export const updatePreferencesSchema = z
-  .strictObject({
-    emailNotifications: z.boolean(),
-    inAppNotifications: z.boolean(),
-  })
-  .partial()
-  .refine(atLeastOneField, { message: 'Provide at least one field to update' });
-
 export const requestDeletionSchema = z.strictObject({ password: currentPasswordSchema });
 
 export const userIdParamsSchema = z.object({ id: z.uuid() });

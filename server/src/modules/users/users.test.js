@@ -64,40 +64,11 @@ describe('own account', () => {
     expect(res.body.user.profile.bio).toBeNull();
   });
 
-  it('reads and updates notification preferences', async () => {
-    const ctx = createTestContext();
-    const { bearer } = await registerUser(ctx);
-
-    const initial = await request(ctx.app).get(`${API}/me/preferences`).set(bearer);
-    expect(initial.body.preferences).toEqual({
-      emailNotifications: true,
-      inAppNotifications: true,
-    });
-
-    const updated = await request(ctx.app)
-      .patch(`${API}/me/preferences`)
-      .set(bearer)
-      .send({ emailNotifications: false });
-    expect(updated.status).toBe(200);
-    expect(updated.body.preferences).toEqual({
-      emailNotifications: false,
-      inAppNotifications: true,
-    });
-
-    const invalid = await request(ctx.app)
-      .patch(`${API}/me/preferences`)
-      .set(bearer)
-      .send({ emailNotifications: 'no' });
-    expect(invalid.status).toBe(400);
-  });
-
   it('requires sign-in for every /me route', async () => {
     const ctx = createTestContext();
 
     expect((await request(ctx.app).get(`${API}/me`)).status).toBe(401);
     expect((await request(ctx.app).patch(`${API}/me/profile`).send({ bio: 'x' })).status).toBe(401);
-    expect((await request(ctx.app).get(`${API}/me/preferences`)).status).toBe(401);
-    expect((await request(ctx.app).patch(`${API}/me/preferences`).send({})).status).toBe(401);
     expect((await request(ctx.app).post(`${API}/me/deletion`).send({})).status).toBe(401);
   });
 });

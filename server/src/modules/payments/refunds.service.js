@@ -134,9 +134,18 @@ export async function markRefundProcessed(deps, refundId) {
     return { refund, order };
   });
 
-  if (done?.order) await notify(deps, done.order, 'buyer', 'refunded', done.refund.amountPaise);
+  if (done?.order) {
+    await notify(deps, done.order, 'buyer', 'refunded', done.refund.amountPaise, done.refund.id);
+  }
   if (done?.booking) {
-    await notifyBooking(deps, done.booking, 'renter', 'refunded', done.refund.amountPaise);
+    await notifyBooking(
+      deps,
+      done.booking,
+      'renter',
+      'refunded',
+      done.refund.amountPaise,
+      done.refund.id,
+    );
     if (done.booking.completed) await notifyBooking(deps, done.booking, 'owner', 'completedOwner');
   }
   return done;

@@ -37,13 +37,6 @@ function toPublicUser(user) {
   };
 }
 
-function toPreferences(preferences) {
-  return {
-    emailNotifications: preferences.emailNotifications,
-    inAppNotifications: preferences.inAppNotifications,
-  };
-}
-
 export async function getOwnAccount({ db }, userId) {
   const user = await db.user.findUniqueOrThrow({
     where: { id: userId },
@@ -55,16 +48,6 @@ export async function getOwnAccount({ db }, userId) {
 export async function updateOwnProfile({ db }, userId, changes) {
   await db.userProfile.update({ where: { userId }, data: changes });
   return getOwnAccount({ db }, userId);
-}
-
-export async function getOwnPreferences({ db }, userId) {
-  const preferences = await db.userPreferences.findUniqueOrThrow({ where: { userId } });
-  return toPreferences(preferences);
-}
-
-export async function updateOwnPreferences({ db }, userId, changes) {
-  const preferences = await db.userPreferences.update({ where: { userId }, data: changes });
-  return toPreferences(preferences);
 }
 
 export async function getPublicProfile({ db }, userId) {

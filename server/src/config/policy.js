@@ -48,6 +48,15 @@ export const DISPUTE_EVIDENCE_RETENTION_DAYS = 180; // photos kept after a dispu
 export const EVIDENCE_PHOTOS_MAX = 5;
 export const EVIDENCE_TEXT_MAX_LENGTH = 2000;
 
+// Notifications (SPEC Module 9; DECISIONS I91 to I99, PROVISIONAL)
+export const NOTIFICATION_RETENTION_DAYS = 90; // read notifications are deleted after this
+export const MESSAGE_NOTIFY_INTERVAL_MINUTES = 30; // at most one per chat in this time
+export const REVIEW_REMINDER_DELAY_HOURS = 24; // after an order or rental completes
+export const EMAIL_RETRY_ATTEMPTS = 3;
+export const EMAIL_RETRY_DELAY_SECONDS = 30; // doubled after each failed try
+export const EMAIL_JOB_KEEP_DAYS = 7; // finished email jobs kept, so their ids stay taken
+export const NOTIFICATIONS_PAGE_SIZE_MAX = 50;
+
 // Reviews and reports (SPEC Module 7; DECISIONS I86 to I90, PROVISIONAL)
 export const REVIEW_WINDOW_DAYS = 30; // after the order or rental completes
 export const REVIEW_TEXT_MAX_LENGTH = 1000;

@@ -1,16 +1,9 @@
 import { Router } from 'express';
 import { clearRefreshCookie } from '../auth/session.service.js';
 import { requestDeletion } from './deletion.service.js';
-import {
-  getOwnAccount,
-  getOwnPreferences,
-  getPublicProfile,
-  updateOwnPreferences,
-  updateOwnProfile,
-} from './users.service.js';
+import { getOwnAccount, getPublicProfile, updateOwnProfile } from './users.service.js';
 import {
   requestDeletionSchema,
-  updatePreferencesSchema,
   updateProfileSchema,
   userIdParamsSchema,
 } from './users.validation.js';
@@ -27,15 +20,6 @@ export function createMeRouter(deps) {
   router.patch('/profile', async (req, res) => {
     const changes = updateProfileSchema.parse(req.body);
     res.json({ user: await updateOwnProfile(deps, req.auth.userId, changes) });
-  });
-
-  router.get('/preferences', async (req, res) => {
-    res.json({ preferences: await getOwnPreferences(deps, req.auth.userId) });
-  });
-
-  router.patch('/preferences', async (req, res) => {
-    const changes = updatePreferencesSchema.parse(req.body);
-    res.json({ preferences: await updateOwnPreferences(deps, req.auth.userId, changes) });
   });
 
   router.post('/deletion', async (req, res) => {

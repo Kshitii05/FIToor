@@ -1,9 +1,10 @@
 import { APP_NAME } from '../../config/app.js';
 import { BUSINESS_TIME_ZONE } from '../../config/policy.js';
+import { deliver, plainTitle } from '../notifications/notifications.service.js';
 import { formatPaise } from './order.format.js';
 
-// Order emails. In-app notifications arrive with Step 9; until then every deadline
-// and money event is announced by email.
+// Order notifications: shown in the app and emailed (Step 9). Each is keyed by the
+// order, the event and the recipient, so it is sent once however often it is called.
 
 const when = new Intl.DateTimeFormat('en-IN', {
   timeZone: BUSINESS_TIME_ZONE,
@@ -79,20 +80,23 @@ const messages = {
   }),
 };
 
+const LINKS = { buyer: (o) => `/orders/${o.id}`, seller: (o) => `/sales/${o.id}` };
+
 /**
- * Sends one of the messages above to the order's buyer or seller. A failure is
- * logged and never undoes the order change that triggered it.
+ * Notifies the order's buyer or seller of one of the events above. A refund passes
+ * its id after the amount, so each refund is its own notification.
  */
 export async function notify(deps, order, recipient, kind, ...args) {
-  const { db, emailSender, logger } = deps;
-  try {
-    const user = await db.user.findUnique({
-      where: { id: recipient === 'buyer' ? order.buyerId : order.sellerId },
-      select: { email: true, status: true },
-    });
-    if (!user || user.status === 'DELETED') return;
-    await emailSender.send({ to: user.email, ...messages[kind](order, ...args) });
-  } catch (error) {
-    logger.error(error);
-  }
+  const { subject, text } = messages[kind](order, ...args);
+  const refundId = kind === 'refunded' ? args[1] : null;
+  await deliver(deps, {
+    userId: recipient === 'buyer' ? order.buyerId : order.sellerId,
+    key: `order:${order.id}:${kind}:${recipient}${refundId ? `:${refundId}` : ''}`,
+    category: kind === 'refunded' ? 'PAYMENTS' : 'ORDERS',
+    type: kind,
+    title: plainTitle(subject),
+    body: text,
+    link: LINKS[recipient](order),
+    email: { subject, text },
+  });
 }

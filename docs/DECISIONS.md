@@ -110,6 +110,15 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I88 | Publishing and moderation | Reviews publish at once with a verified-transaction badge. Reported reviews stay published until an admin hides them, with a reason; admins can show them again. Hidden reviews leave the averages. | PROVISIONAL |
 | I89 | Reports | A person, a listing, a chat message (by the other person in that chat) or a review can be reported with a set reason (prohibited item, counterfeit, scam, harassment, inappropriate, spam, other) and optional details. One open report per reporter and target. Reporting never removes anything by itself. | PROVISIONAL |
 | I90 | Report actions | An admin dismisses a report, hides the reported review, or removes the reported listing, always with a reason and an audit log entry; an action resolves every open report about the same thing. Warning and suspending users come with the admin step (Step 10). | PROVISIONAL |
+| I91 | One notification service | Every notification is saved in the database first, then shown live over Socket.IO and emailed through a BullMQ queue. Orders, rentals, payments, disputes, messages, offers and reviews all use it. Browser push is out of scope. | PROVISIONAL |
+| I92 | Never sent twice | Each notification has a key naming the event (for example booking:<id>:returnTomorrow:renter). The key is unique in the database, and the email job id is taken from the saved notification, so a retried job, a repeated call or a second run cannot notify twice. | PROVISIONAL |
+| I93 | Deadline jobs | Deadlines keep running from the BullMQ job that repeats every minute and changes only what is still waiting (Steps 5 to 8). There is no separate delayed job per deadline, which would be a second source of truth that could drift from the database. | PROVISIONAL |
+| I94 | Critical categories | Orders, rentals, payments and disputes are critical: always shown in the app and emailed, and shown as always on in the settings (SPEC Module 9). | PROVISIONAL |
+| I95 | Optional categories | Messages, offers and reviews can be turned off, in the app and by email separately. The Step 1 on/off switches were replaced by these settings, with their values carried over. | PROVISIONAL |
+| I96 | Message notifications | At most one per chat every 30 minutes, and none while the person has that chat open. | PROVISIONAL |
+| I97 | Email retries | An email job is tried 3 times, waiting 30 seconds, then longer each time; failures are logged. Finished jobs are kept 7 days so their ids stay taken. | PROVISIONAL |
+| I98 | Keeping notifications | Read notifications are deleted 90 days after they were read; unread ones are kept. | PROVISIONAL |
+| I99 | Codes stay out | Sign-in, verification and password reset codes, and account deletion emails, stay direct emails and never appear in the notification list. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -131,6 +140,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-24 — Added I91–I99 while building notifications (Module 9).
 - 2026-11-24 — Added I79–I90 while building disputes, reviews and reports (Module 7).
 - 2026-11-20 — Added I68–I78 while building messaging and offers (Module 8).
 - 2026-11-13 — Added I59–I67 while building rentals, deposits, returns and inspection (Module 4).

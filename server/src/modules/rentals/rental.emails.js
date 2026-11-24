@@ -1,5 +1,6 @@
 import { APP_NAME } from '../../config/app.js';
 import { BUSINESS_TIME_ZONE } from '../../config/policy.js';
+import { deliver, plainTitle } from '../notifications/notifications.service.js';
 import { formatPaise } from '../orders/order.format.js';
 import { fromDateColumn } from './rental.rules.js';
 
@@ -109,20 +110,26 @@ const messages = {
   }),
 };
 
+const LINKS = {
+  renter: (b) => `/rentals/${b.id}`,
+  owner: (b) => `/rented-out/${b.id}`,
+};
+
 /**
- * Sends one of the messages above to the booking's renter or owner. A failure is
- * logged and never undoes the change that triggered it.
+ * Notifies the booking's renter or owner of one of the events above (Step 9). Keyed
+ * by booking, event and recipient; a refund passes its id after the amount.
  */
 export async function notifyBooking(deps, booking, recipient, kind, ...args) {
-  const { db, emailSender, logger } = deps;
-  try {
-    const user = await db.user.findUnique({
-      where: { id: recipient === 'renter' ? booking.renterId : booking.ownerId },
-      select: { email: true, status: true },
-    });
-    if (!user || user.status === 'DELETED') return;
-    await emailSender.send({ to: user.email, ...messages[kind](booking, ...args) });
-  } catch (error) {
-    logger.error(error);
-  }
+  const { subject, text } = messages[kind](booking, ...args);
+  const refundId = kind === 'refunded' ? args[1] : null;
+  await deliver(deps, {
+    userId: recipient === 'renter' ? booking.renterId : booking.ownerId,
+    key: `booking:${booking.id}:${kind}:${recipient}${refundId ? `:${refundId}` : ''}`,
+    category: kind === 'refunded' ? 'PAYMENTS' : 'RENTALS',
+    type: kind,
+    title: plainTitle(subject),
+    body: text,
+    link: LINKS[recipient](booking),
+    email: { subject, text },
+  });
 }

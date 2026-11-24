@@ -1,6 +1,7 @@
 import { OFFER_OPEN_HOURS, OFFER_USE_HOURS } from '../../config/policy.js';
 import { addHours } from '../../lib/clock.js';
 import { AppError } from '../../lib/errors.js';
+import { deliver } from '../notifications/notifications.service.js';
 import { formatPaise } from '../orders/order.format.js';
 import {
   announceMessage,
@@ -51,6 +52,37 @@ async function loadOffer(db, id, me) {
     throw AppError.notFound('Offer not found');
   }
   return offer;
+}
+
+const OFFER_NOTES = {
+  offerReceived: (o) => ['New offer', `${offerLine('Offered', o)} for ${o.listing.title}.`],
+  offerCountered: (o) => [
+    'Counter-offer',
+    `${offerLine('Countered with', o)} for ${o.listing.title}.`,
+  ],
+  offerAccepted: (o) => [
+    'Offer accepted',
+    `${offerLine('Accepted', o)} for ${o.listing.title}. Check out within 48 hours.`,
+  ],
+  offerDeclined: (o) => ['Offer declined', `${offerLine('Declined', o)} for ${o.listing.title}.`],
+};
+
+/** Tells one person about an offer event (optional category; I95). Keyed per offer and event. */
+async function notifyOffer(deps, offerId, type, userId) {
+  const offer = await deps.db.priceOffer.findUniqueOrThrow({
+    where: { id: offerId },
+    include: offerInclude,
+  });
+  const [title, body] = OFFER_NOTES[type](offer);
+  await deliver(deps, {
+    userId,
+    key: `offer:${offerId}:${type}`,
+    category: 'OFFERS',
+    type,
+    title,
+    body,
+    link: `/messages/${offer.conversationId}`,
+  });
 }
 
 async function announceOffer(deps, offerId) {
@@ -149,6 +181,7 @@ export async function makeOffer(deps, me, { listingId, quantity, unitPricePaise 
     throw error;
   }
   await announceMessage(deps, conversation, created.message.id);
+  await notifyOffer(deps, created.offer.id, 'offerReceived', listing.sellerId);
   return { offer: await announceOffer(deps, created.offer.id), conversationId: conversation.id };
 }
 
@@ -196,6 +229,13 @@ async function closeOffer(deps, offer, me, { status, data = {}, line, extra }) {
     return { follow, message };
   });
   await announceMessage(deps, conversation, result.message.id);
+  // The person who made the offer hears the answer.
+  const note = { ACCEPTED: 'offerAccepted', REJECTED: 'offerDeclined' }[status];
+  if (note) await notifyOffer(deps, offer.id, note, offer.madeById);
+  if (result.follow) {
+    const other = offer.madeById === offer.buyerId ? offer.buyerId : offer.sellerId;
+    await notifyOffer(deps, result.follow.id, 'offerCountered', other);
+  }
   const view = await announceOffer(deps, offer.id);
   return result.follow ? announceOffer(deps, result.follow.id) : view;
 }

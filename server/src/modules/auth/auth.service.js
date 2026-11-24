@@ -46,7 +46,6 @@ export async function register(deps, { email, phone, password, displayName }, cl
           passwordHash,
           createdAt: clock.now(),
           profile: { create: { displayName } },
-          preferences: { create: {} },
         },
         include: { profile: true },
       });
