@@ -131,6 +131,8 @@ describe('user management', () => {
       await db.notification.count({ where: { userId: seller.user.id, type: 'accountSuspended' } }),
     ).toBe(1);
 
+    // The test clock stands still; move it so the two audit rows have an order.
+    ctx.clock.advance({ minutes: 1 });
     const restored = await adminPost(ctx, admin, `/users/${seller.user.id}/restore`, {
       reason: 'Appeal accepted after review',
     });
@@ -205,6 +207,9 @@ describe('listing moderation', () => {
     expect((await adminPost(ctx, admin, `/listings/${listing.id}/remove`, reason)).status).toBe(
       409,
     );
+
+    // The test clock stands still; move it so the two audit rows have an order.
+    ctx.clock.advance({ minutes: 1 });
 
     const restored = await adminPost(ctx, admin, `/listings/${listing.id}/restore`, {
       reason: 'Seller proved it is genuine',

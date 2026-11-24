@@ -147,3 +147,37 @@ export function fieldErrors(error) {
   }
   return errors;
 }
+
+/**
+ * Downloads a file (a CSV export) from a signed-in endpoint and saves it. Uses the
+ * same session renewal as `api`, so the file is never fetched without the token.
+ */
+export async function downloadFile(path, filename) {
+  const fetchFile = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: 'include',
+    });
+  let response;
+  try {
+    response = await fetchFile();
+    if (response.status === 401 && (await refreshSession())) response = await fetchFile();
+  } catch {
+    throw new ApiError(0, {
+      code: 'NETWORK_ERROR',
+      message: 'Cannot reach the server. Check your connection and try again.',
+    });
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, data?.error);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

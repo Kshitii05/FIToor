@@ -1,6 +1,22 @@
 import { Route, Routes } from 'react-router-dom';
 import { GuestOnly, RequireAuth } from './auth/guards.jsx';
+import { AdminLayout } from './components/admin/AdminLayout.jsx';
 import { AppLayout } from './components/layout/AppLayout.jsx';
+import AdminAuditLogPage from './pages/admin/AdminAuditLogPage.jsx';
+import AdminBankAccountsPage from './pages/admin/AdminBankAccountsPage.jsx';
+import {
+  AdminDisputePage,
+  AdminDisputesPage,
+  AdminReportsPage,
+} from './pages/admin/AdminDisputesPage.jsx';
+import AdminListingsPage from './pages/admin/AdminListingsPage.jsx';
+import AdminMoneyPage from './pages/admin/AdminMoneyPage.jsx';
+import { AdminOrdersPage, AdminRentalsPage } from './pages/admin/AdminOrdersPage.jsx';
+import AdminOverviewPage from './pages/admin/AdminOverviewPage.jsx';
+import { AdminPayoutBatchPage, AdminPayoutsPage } from './pages/admin/AdminPayoutsPage.jsx';
+import AdminUserPage from './pages/admin/AdminUserPage.jsx';
+import AdminUsersPage from './pages/admin/AdminUsersPage.jsx';
+import SellerDashboardPage from './pages/SellerDashboardPage.jsx';
 import BuyerOrderPage from './pages/BuyerOrderPage.jsx';
 import CartPage from './pages/CartPage.jsx';
 import DisputePage from './pages/DisputePage.jsx';
@@ -67,6 +83,25 @@ export default function App() {
           <Route path="rented-out/:id" element={<OwnerBookingPage />} />
           <Route path="listings/new" element={<NewListingPage />} />
           <Route path="listings/:id/edit" element={<EditListingPage />} />
+          <Route path="dashboard" element={<SellerDashboardPage />} />
+
+          {/* The admin console. The server checks the admin role on every request. */}
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminOverviewPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="users/:id" element={<AdminUserPage />} />
+            <Route path="listings" element={<AdminListingsPage />} />
+            <Route path="orders" element={<AdminOrdersPage />} />
+            <Route path="rentals" element={<AdminRentalsPage />} />
+            <Route path="disputes" element={<AdminDisputesPage />} />
+            <Route path="disputes/:id" element={<AdminDisputePage />} />
+            <Route path="reports" element={<AdminReportsPage />} />
+            <Route path="money" element={<AdminMoneyPage />} />
+            <Route path="bank-accounts" element={<AdminBankAccountsPage />} />
+            <Route path="payouts" element={<AdminPayoutsPage />} />
+            <Route path="payouts/:id" element={<AdminPayoutBatchPage />} />
+            <Route path="audit-log" element={<AdminAuditLogPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

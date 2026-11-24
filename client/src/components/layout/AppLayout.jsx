@@ -80,6 +80,7 @@ function MessagesLink() {
 }
 
 const MENU_LINKS = [
+  ['/dashboard', 'Seller dashboard'],
   ['/notifications', 'Notifications'],
   ['/messages', 'Messages'],
   ['/orders', 'My orders'],
@@ -155,7 +156,10 @@ function AccountMenu() {
           className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-card"
         >
           <nav aria-label="Your account">
-            {MENU_LINKS.map(([to, label]) => (
+            {(user.role === 'ADMIN'
+              ? [['/admin', 'Admin console'], ...MENU_LINKS]
+              : MENU_LINKS
+            ).map(([to, label]) => (
               <Link
                 key={to}
                 to={to}

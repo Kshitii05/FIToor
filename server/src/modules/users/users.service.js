@@ -11,6 +11,8 @@ export function toPrivateUser(user) {
     phone: user.phone,
     emailVerified: user.emailVerifiedAt !== null,
     phoneVerified: user.phoneVerifiedAt !== null,
+    // Only decides which screens to show; the server checks the role on every admin request.
+    role: user.role,
     createdAt: user.createdAt.toISOString(),
     profile: toProfile(user.profile),
   };
