@@ -33,8 +33,8 @@ const disputeInclude = {
   },
   claimant: person,
   respondent: person,
-  order: { select: { ref: true } },
-  booking: { select: { ref: true, title: true } },
+  order: { select: { ref: true, buyerId: true } },
+  booking: { select: { ref: true, title: true, renterId: true } },
 };
 
 const iso = (date) => (date ? date.toISOString() : null);
@@ -74,9 +74,18 @@ export function toDisputeView(dispute, viewerId, now, { admin = false } = {}) {
     orderId: dispute.orderId,
     bookingId: dispute.bookingId,
     subject: dispute.order
-      ? { type: 'order', ref: dispute.order.ref }
+      ? {
+          type: 'order',
+          ref: dispute.order.ref,
+          side: dispute.order.buyerId === viewerId ? 'buyer' : 'seller',
+        }
       : dispute.booking
-        ? { type: 'booking', ref: dispute.booking.ref, title: dispute.booking.title }
+        ? {
+            type: 'booking',
+            ref: dispute.booking.ref,
+            title: dispute.booking.title,
+            side: dispute.booking.renterId === viewerId ? 'renter' : 'owner',
+          }
         : null,
     claimant: personView(dispute.claimant),
     respondent: personView(dispute.respondent),
