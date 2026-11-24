@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/authContext.js';
 import { SavedPlaces } from '../components/map/SavedPlaces.jsx';
 import { BlockedPeople } from '../components/chat/BlockedPeople.jsx';
+import { NotificationSettings } from '../components/notifications/NotificationSettings.jsx';
 import { SavedAddresses } from '../components/orders/Addresses.jsx';
 import { TextLink } from '../components/layout/AppLayout.jsx';
 import {
@@ -134,69 +135,6 @@ function AccountDetails() {
   );
 }
 
-function NotificationPreferences() {
-  const [preferences, setPreferences] = useState(null);
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    api('/me/preferences')
-      .then((data) => {
-        if (!cancelled) setPreferences(data.preferences);
-      })
-      .catch((failure) => {
-        if (!cancelled) setError(failure.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function change(field, value) {
-    const previous = preferences;
-    setPreferences({ ...preferences, [field]: value });
-    setError(null);
-    setSaving(true);
-    try {
-      const data = await api('/me/preferences', { method: 'PATCH', body: { [field]: value } });
-      setPreferences(data.preferences);
-    } catch (failure) {
-      setPreferences(previous);
-      setError(`Could not save that change. ${failure.message}`);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card>
-      <SectionHeading title="Notifications" description="Choose how you hear from us." />
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {preferences ? (
-        <div className="divide-y divide-line">
-          <Switch
-            label="Email"
-            description="Updates about your orders, rentals and messages by email."
-            checked={preferences.emailNotifications}
-            disabled={saving}
-            onChange={(value) => change('emailNotifications', value)}
-          />
-          <Switch
-            label="In the app"
-            description="Notifications shown while you are signed in."
-            checked={preferences.inAppNotifications}
-            disabled={saving}
-            onChange={(value) => change('inAppNotifications', value)}
-          />
-        </div>
-      ) : error ? null : (
-        <Loading label="Loading preferences" />
-      )}
-    </Card>
-  );
-}
-
 function SignOut() {
   const { logout } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
@@ -321,7 +259,7 @@ export default function ProfilePage() {
         <SavedAddresses />
         <SavedPlaces />
         <BlockedPeople />
-        <NotificationPreferences />
+        <NotificationSettings />
         <SignOut />
         <DeleteAccount />
       </div>

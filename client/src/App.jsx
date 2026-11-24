@@ -16,6 +16,7 @@ import MessagesPage from './pages/MessagesPage.jsx';
 import MyListingsPage from './pages/MyListingsPage.jsx';
 import NewListingPage from './pages/NewListingPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
 import OrdersListPage from './pages/OrdersListPage.jsx';
 import OwnerBookingPage from './pages/OwnerBookingPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="liked" element={<LikedPage />} />
           <Route path="cart" element={<CartPage />} />
           <Route path="messages" element={<MessagesPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="disputes" element={<DisputesPage />} />
           <Route path="disputes/:id" element={<DisputePage />} />
           <Route path="messages/:id" element={<MessagesPage />} />

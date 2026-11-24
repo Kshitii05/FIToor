@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { useAuth } from '../../auth/authContext.js';
 import { useCart } from '../../cart/cartContext.js';
 import { useChat } from '../../chat/chatContext.js';
+import { NotificationBell } from '../notifications/NotificationBell.jsx';
 import { APP_NAME, APP_TAGLINE } from '../../config/app.js';
 import { SearchBox } from '../search/SearchBox.jsx';
 import { ButtonLink, Loading } from '../ui/index.js';
@@ -79,6 +80,7 @@ function MessagesLink() {
 }
 
 const MENU_LINKS = [
+  ['/notifications', 'Notifications'],
   ['/messages', 'Messages'],
   ['/orders', 'My orders'],
   ['/sales', 'My sales'],
@@ -200,6 +202,7 @@ function AccountNav() {
 
   return (
     <>
+      <NotificationBell />
       <MessagesLink />
       <CartLink />
       <ButtonLink to="/listings/new" size="sm">
