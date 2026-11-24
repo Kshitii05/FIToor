@@ -12,6 +12,8 @@ import {
 import { requireAdmin } from '../../lib/auth.js';
 import { AppError } from '../../lib/errors.js';
 import { paginationQuery } from '../../lib/pagination.js';
+import { rupees } from '../../lib/csv.js';
+import { dayRange, listQuery as adminListQuery, respondList } from '../admin/admin.query.js';
 import { uploadImages } from '../../lib/upload.js';
 import {
   adminCancel,
@@ -24,6 +26,7 @@ import {
   listOrders,
   loadAs,
   loadOrder,
+  orderInclude,
   markDeliveryReported,
   markDispatched,
   reportIssue,
@@ -49,6 +52,43 @@ const ORDER_STATUSES = [
 
 const idParams = z.object({ id: z.uuid() });
 const listQuery = z.object({ ...paginationQuery, status: z.enum(ORDER_STATUSES).optional() });
+const adminOrdersQuery = z.object({ ...adminListQuery, status: z.enum(ORDER_STATUSES).optional() });
+
+/** The admin's order filter: status, dates placed, and order ref or either side's email. */
+function adminOrdersWhere({ status, q, from, to }) {
+  const where = {};
+  if (status) where.status = status;
+  const placed = dayRange({ from, to });
+  if (placed) where.createdAt = placed;
+  if (q) {
+    where.OR = [
+      { ref: { contains: q, mode: 'insensitive' } },
+      { buyer: { email: { contains: q, mode: 'insensitive' } } },
+      { seller: { email: { contains: q, mode: 'insensitive' } } },
+    ];
+  }
+  return where;
+}
+
+const person = {
+  select: { id: true, phone: true, email: true, profile: { select: { displayName: true } } },
+};
+const adminOrderInclude = { ...orderInclude, buyer: person, seller: person };
+
+const orderColumns = [
+  ['ref', (o) => o.ref],
+  ['status', (o) => o.status],
+  ['fulfilment', (o) => o.fulfilment],
+  ['buyer', (o) => o.buyer?.email],
+  ['seller', (o) => o.seller?.email],
+  ['items (rupees)', (o) => rupees(o.itemsSubtotalPaise)],
+  ['delivery (rupees)', (o) => rupees(o.deliveryChargePaise)],
+  ['total (rupees)', (o) => rupees(o.totalPaise)],
+  ['commission (rupees)', (o) => rupees(o.commissionPaise)],
+  ['refunded (rupees)', (o) => rupees(o.refundedPaise)],
+  ['placed', (o) => o.createdAt],
+  ['completed', (o) => o.completedAt],
+];
 const optionalReason = z.strictObject({
   reason: z.string().trim().max(REASON_MAX_LENGTH).optional(),
 });
@@ -181,8 +221,21 @@ export function createAdminOrdersRouter(deps) {
   const reply = (res, order) => res.json({ order: view(order) });
 
   router.get('/', async (req, res) => {
-    const query = listQuery.parse(req.query);
-    res.json(await listOrders(deps, { status: query.status }, query, view));
+    const query = adminOrdersQuery.parse(req.query);
+    const where = adminOrdersWhere(query);
+    await respondList(res, query, {
+      find: (window) =>
+        deps.db.order.findMany({
+          where,
+          include: adminOrderInclude,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          ...window,
+        }),
+      count: () => deps.db.order.count({ where }),
+      view,
+      columns: orderColumns,
+      filename: 'orders.csv',
+    });
   });
   router.get('/:id', async (req, res) => reply(res, await load(req)));
   router.post('/:id/verify-delivery', async (req, res) => {

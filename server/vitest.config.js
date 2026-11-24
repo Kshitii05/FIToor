@@ -38,6 +38,7 @@ export default defineConfig({
       RAZORPAY_KEY_ID: '',
       RAZORPAY_KEY_SECRET: '',
       RAZORPAY_WEBHOOK_SECRET: '',
+      BANK_DETAILS_KEY: 'test-only-bank-details-key-0123456789abcdef0123',
     },
   },
 });

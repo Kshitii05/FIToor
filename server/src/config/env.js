@@ -24,6 +24,8 @@ const schema = z.object({
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   OTP_SECRET: z.string().min(32),
+  // Encrypts seller bank account numbers (I14). Changing it makes saved numbers unreadable.
+  BANK_DETAILS_KEY: z.string().min(32),
   SMTP_HOST: optionalString,
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: optionalString,

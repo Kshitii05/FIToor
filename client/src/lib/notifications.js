@@ -14,6 +14,10 @@ export const CATEGORY = {
     label: 'Disputes',
     description: 'Problems reported, answers, decisions and appeals.',
   },
+  ACCOUNT: {
+    label: 'Account',
+    description: 'Warnings, suspension and your bank details being checked.',
+  },
   MESSAGES: {
     label: 'Messages',
     description: 'New chat messages (at most one per chat every 30 minutes).',

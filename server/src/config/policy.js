@@ -208,3 +208,17 @@ export const REASON_MAX_LENGTH = 500;
 export const REFUND_RETRY_MAX_ATTEMPTS = 5;
 export const REFUND_RETRY_AFTER_MINUTES = 2;
 export const ORDER_JOBS_INTERVAL_SECONDS = 60;
+
+// Admin, payouts and analytics (SPEC Modules 10, 11 and 12; DECISIONS I100 to I111, PROVISIONAL)
+export const PAYOUT_BATCH_WEEKDAY = 1; // ISO weekday the weekly batch is built (Monday)
+export const PAYOUT_BATCH_HOUR = 10; // business time zone
+export const PAYOUT_PROCESSING_BUSINESS_DAYS = 3; // SPEC 12: target to finish a batch
+export const BANK_HOLDER_NAME_MAX_LENGTH = 100;
+export const BANK_ACCOUNT_NUMBER_MIN_LENGTH = 9;
+export const BANK_ACCOUNT_NUMBER_MAX_LENGTH = 18;
+export const BANK_REFERENCE_MAX_LENGTH = 50;
+export const INACTIVE_AFTER_DAYS = 30; // no activity for this long counts as inactive
+export const CSV_EXPORT_MAX_ROWS = 10_000;
+export const ANALYTICS_RANGE_MAX_DAYS = 366;
+export const ANALYTICS_DEFAULT_RANGE_DAYS = 30;
+export const ANALYTICS_TOP_LIMIT = 10; // top sellers, listings, categories, localities

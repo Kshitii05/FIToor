@@ -103,6 +103,14 @@ export async function login(deps, credentials, client) {
     );
   }
 
+  if (user.status === 'SUSPENDED') {
+    throw new AppError(
+      403,
+      'ACCOUNT_SUSPENDED',
+      'This account is suspended. Contact support if you think this is a mistake.',
+    );
+  }
+
   const session = await createSession(db, clock, { userId: user.id, ...client });
   return { user: toPrivateUser(user), session };
 }

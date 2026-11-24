@@ -151,6 +151,9 @@ export async function purgeExpiredDeletions({ db, clock }) {
       });
       await tx.notificationPreference.deleteMany({ where: { userId: id } });
       await tx.notification.deleteMany({ where: { userId: id } });
+      // Bank details are personal data; payout records keep only the masked copy.
+      await tx.sellerBankAccount.deleteMany({ where: { userId: id } });
+      await tx.userActivityDay.deleteMany({ where: { userId: id } });
       await tx.userVerification.deleteMany({ where: { userId: id } });
       await tx.userSession.deleteMany({ where: { userId: id } });
       // Their listings leave the marketplace; the rows stay for past transactions.

@@ -70,6 +70,12 @@ import {
   createUserReviewsRouter,
 } from './modules/reviews/reviews.routes.js';
 import { createMeRouter, createUsersRouter } from './modules/users/users.routes.js';
+import { createAdminRouter } from './modules/admin/admin.routes.js';
+import {
+  createBankAccountRouter,
+  createMyAnalyticsRouter,
+  createMyPayoutsRouter,
+} from './modules/payouts/payouts.routes.js';
 
 /**
  * Builds the Express app. Dependencies are passed in so tests can supply a fixed
@@ -170,6 +176,10 @@ export function createApp({
   api.use('/me/reviews', createMyReviewsRouter(deps));
   api.use('/reports', createReportsRouter(deps));
   api.use('/admin', createAdminModerationRouter(deps));
+  api.use('/admin', createAdminRouter(deps));
+  api.use('/me/bank-account', createBankAccountRouter(deps));
+  api.use('/me/payouts', createMyPayoutsRouter(deps));
+  api.use('/me/analytics', createMyAnalyticsRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));

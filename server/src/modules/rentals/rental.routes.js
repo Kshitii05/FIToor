@@ -13,6 +13,8 @@ import {
   REASON_MAX_LENGTH,
 } from '../../config/policy.js';
 import { requireAdmin, requireVerified } from '../../lib/auth.js';
+import { rupees } from '../../lib/csv.js';
+import { dayRange, listQuery as adminListQuery, respondList } from '../admin/admin.query.js';
 import { AppError } from '../../lib/errors.js';
 import { paginationQuery } from '../../lib/pagination.js';
 import { uploadImages } from '../../lib/upload.js';
@@ -44,7 +46,12 @@ import {
   toAdminBooking,
   toOwnerBooking,
   toRenterBooking,
+  bookingInclude,
 } from './rental.service.js';
+
+const adminPerson = {
+  select: { id: true, phone: true, email: true, profile: { select: { displayName: true } } },
+};
 
 const BOOKING_STATUSES = [
   'REQUESTED',
@@ -75,6 +82,48 @@ const listQuery = z.object({
   status: z.enum(BOOKING_STATUSES).optional(),
   listingId: z.uuid().optional(),
 });
+const adminBookingsQuery = z.object({
+  ...adminListQuery,
+  status: z.enum(BOOKING_STATUSES).optional(),
+  listingId: z.uuid().optional(),
+});
+
+/** The admin's booking filter: status, listing, dates requested, and ref or either side's email. */
+function adminBookingsWhere({ status, listingId, q, from, to }) {
+  const where = {};
+  if (status) where.status = status;
+  if (listingId) where.listingId = listingId;
+  const made = dayRange({ from, to });
+  if (made) where.createdAt = made;
+  if (q) {
+    where.OR = [
+      { ref: { contains: q, mode: 'insensitive' } },
+      { title: { contains: q, mode: 'insensitive' } },
+      { renter: { email: { contains: q, mode: 'insensitive' } } },
+      { owner: { email: { contains: q, mode: 'insensitive' } } },
+    ];
+  }
+  return where;
+}
+
+const bookingColumns = [
+  ['ref', (b) => b.ref],
+  ['title', (b) => b.title],
+  ['status', (b) => b.status],
+  ['renter', (b) => b.renter?.email],
+  ['owner', (b) => b.owner?.email],
+  ['start', (b) => b.startDate.toISOString().slice(0, 10)],
+  ['end', (b) => b.endDate.toISOString().slice(0, 10)],
+  ['fee (rupees)', (b) => rupees(b.feePaise)],
+  ['deposit (rupees)', (b) => rupees(b.depositPaise)],
+  ['delivery (rupees)', (b) => rupees(b.deliveryChargePaise)],
+  ['commission (rupees)', (b) => rupees(b.commissionPaise)],
+  ['late fee (rupees)', (b) => rupees(b.lateFeePaise)],
+  ['deducted from deposit (rupees)', (b) => rupees(b.depositDeductedPaise)],
+  ['requested', (b) => b.createdAt],
+  ['completed', (b) => b.completedAt],
+];
+
 const requestSchema = z.strictObject({
   listingId: z.uuid(),
   durationDays: z.number().int().min(1).max(RENTAL_PACKAGE_MAX_DAYS),
@@ -328,10 +377,22 @@ export function createAdminRentalsRouter(deps) {
   const reply = (res, booking) => res.json({ booking: view(booking) });
 
   router.get('/', async (req, res) => {
-    const query = listQuery.parse(req.query);
-    res.json(
-      await listBookings(deps, { status: query.status, listingId: query.listingId }, query, view),
-    );
+    const query = adminBookingsQuery.parse(req.query);
+    const where = adminBookingsWhere(query);
+    const include = { ...bookingInclude, renter: adminPerson, owner: adminPerson };
+    await respondList(res, query, {
+      find: (window) =>
+        db.rentalBooking.findMany({
+          where,
+          include,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          ...window,
+        }),
+      count: () => db.rentalBooking.count({ where }),
+      view,
+      columns: bookingColumns,
+      filename: 'rentals.csv',
+    });
   });
   router.get('/:id', async (req, res) => reply(res, await load(req)));
   router.post('/:id/verify-handover', async (req, res) => {

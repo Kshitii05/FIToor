@@ -15,7 +15,7 @@ import { paged, pageWindow } from '../../lib/pagination.js';
 // payments and disputes are critical and always sent (I94); messages, offers and
 // reviews follow the person's settings (I95).
 
-export const CRITICAL = ['ORDERS', 'RENTALS', 'PAYMENTS', 'DISPUTES'];
+export const CRITICAL = ['ORDERS', 'RENTALS', 'PAYMENTS', 'DISPUTES', 'ACCOUNT'];
 export const OPTIONAL = ['MESSAGES', 'OFFERS', 'REVIEWS'];
 export const CATEGORIES = [...CRITICAL, ...OPTIONAL];
 

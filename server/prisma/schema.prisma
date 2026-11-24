@@ -16,6 +16,8 @@ datasource db {
 
 enum UserStatus {
   ACTIVE
+  // Stopped by an admin, with a reason; an admin can restore the account.
+  SUSPENDED
   PENDING_DELETION
   DELETED
 }
@@ -44,6 +46,8 @@ model User {
   deletionRequestedAt  DateTime?  @map("deletion_requested_at") @db.Timestamptz(3)
   deletionScheduledFor DateTime?  @map("deletion_scheduled_for") @db.Timestamptz(3)
   deletedAt            DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  suspendedAt          DateTime?  @map("suspended_at") @db.Timestamptz(3)
+  suspensionReason     String?    @map("suspension_reason")
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -83,9 +87,29 @@ model User {
   reports                 Report[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  activityDays            UserActivityDay[]
+  bankAccount             SellerBankAccount?        @relation("BankAccountOwner")
+  bankVerifications       SellerBankAccount[]       @relation("BankAccountVerifier")
+  payoutItems             PayoutItem[]
+  payoutBatches           PayoutBatch[]
+  payoutAttempts          PayoutAttempt[]
 
   @@index([status, deletionScheduledFor])
+  @@index([createdAt])
   @@map("users")
+}
+
+// One row per person per calendar day (business time zone) they signed in or
+// refreshed their session: the source of "active users" (I101).
+model UserActivityDay {
+  userId String   @map("user_id") @db.Uuid
+  day    DateTime @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+  @@index([day])
+  @@map("user_activity_days")
 }
 
 model UserProfile {
@@ -453,6 +477,8 @@ enum LedgerEntryType {
   DEPOSIT_COLLECTED
   DEPOSIT_REFUND
   DEPOSIT_DEDUCTION
+  // Money sent to the seller by bank transfer, one row per paid order or booking.
+  SELLER_PAYOUT
 }
 
 model CartItem {
@@ -602,6 +628,7 @@ model Order {
   refunds  Refund[]
   disputes Dispute[]
   reviews  Review[]
+  payout   PayoutLine?
 
   @@unique([checkoutId, sellerId])
   @@index([buyerId, createdAt])
@@ -846,6 +873,7 @@ model RentalBooking {
   events   BookingEvent[]
   payments Payment[]
   refunds  Refund[]
+  payout   PayoutLine?
 
   @@index([listingId, status])
   @@index([renterId, createdAt])
@@ -1248,6 +1276,7 @@ enum NotificationCategory {
   RENTALS // critical
   PAYMENTS // critical
   DISPUTES // critical
+  ACCOUNT // critical: warnings, suspension, bank details
   MESSAGES
   OFFERS
   REVIEWS
@@ -1295,4 +1324,135 @@ model NotificationPreference {
 
   @@id([userId, category])
   @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// Seller payouts
+// ---------------------------------------------------------------------------
+
+enum BankAccountStatus {
+  PENDING // waiting for an admin to check it
+  VERIFIED
+  REJECTED
+}
+
+// Where a seller is paid (I14). The account number is encrypted (AES-256-GCM) and
+// only its last 4 digits are ever shown; changing any detail needs a new check.
+model SellerBankAccount {
+  id                     String            @id @default(uuid()) @db.Uuid
+  userId                 String            @unique @map("user_id") @db.Uuid
+  holderName             String            @map("holder_name")
+  accountNumberEncrypted String            @map("account_number_encrypted")
+  accountLast4           String            @map("account_last4")
+  ifsc                   String
+  status                 BankAccountStatus @default(PENDING)
+  // Why it needs checking again, or why it was rejected.
+  note                   String?
+  submittedAt            DateTime          @map("submitted_at") @db.Timestamptz(3)
+  verifiedAt             DateTime?         @map("verified_at") @db.Timestamptz(3)
+  verifiedById           String?           @map("verified_by_id") @db.Uuid
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User  @relation("BankAccountOwner", fields: [userId], references: [id], onDelete: Cascade)
+  verifiedBy User? @relation("BankAccountVerifier", fields: [verifiedById], references: [id])
+
+  @@index([status, submittedAt])
+  @@map("seller_bank_accounts")
+}
+
+enum PayoutBatchStatus {
+  OPEN // items still waiting to be marked paid or failed
+  CLOSED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// A weekly batch of manual bank transfers (SPEC 12). A partial unique index allows
+// only one open batch at a time.
+model PayoutBatch {
+  id                String            @id @default(uuid()) @db.Uuid
+  ref               String            @unique
+  status            PayoutBatchStatus @default(OPEN)
+  // Null when the weekly job built it.
+  createdById       String?           @map("created_by_id") @db.Uuid
+  totalPaise        Int               @map("total_paise")
+  createdAt         DateTime          @map("created_at") @db.Timestamptz(3)
+  dueAt             DateTime          @map("due_at") @db.Timestamptz(3)
+  overdueNotifiedAt DateTime?         @map("overdue_notified_at") @db.Timestamptz(3)
+  closedAt          DateTime?         @map("closed_at") @db.Timestamptz(3)
+
+  createdBy User?        @relation(fields: [createdById], references: [id])
+  items     PayoutItem[]
+
+  @@index([status, dueAt])
+  @@index([createdAt])
+  @@map("payout_batches")
+}
+
+// What one seller is paid in one batch: the sum of its lines.
+model PayoutItem {
+  id          String       @id @default(uuid()) @db.Uuid
+  ref         String       @unique
+  batchId     String       @map("batch_id") @db.Uuid
+  sellerId    String       @map("seller_id") @db.Uuid
+  amountPaise Int          @map("amount_paise")
+  status      PayoutStatus @default(PENDING)
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+  paidAt      DateTime?    @map("paid_at") @db.Timestamptz(3)
+  failedAt    DateTime?    @map("failed_at") @db.Timestamptz(3)
+
+  batch    PayoutBatch     @relation(fields: [batchId], references: [id])
+  seller   User            @relation(fields: [sellerId], references: [id])
+  lines    PayoutLine[]
+  attempts PayoutAttempt[]
+
+  @@unique([batchId, sellerId])
+  @@index([sellerId, createdAt])
+  @@index([status])
+  @@map("payout_items")
+}
+
+// One completed order or booking paid by an item. Each order and each booking can
+// be in one line only, so the same money can never be paid out twice.
+model PayoutLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  itemId      String  @map("item_id") @db.Uuid
+  orderId     String? @unique @map("order_id") @db.Uuid
+  bookingId   String? @unique @map("booking_id") @db.Uuid
+  amountPaise Int     @map("amount_paise")
+
+  item    PayoutItem     @relation(fields: [itemId], references: [id])
+  order   Order?         @relation(fields: [orderId], references: [id])
+  booking RentalBooking? @relation(fields: [bookingId], references: [id])
+
+  @@index([itemId])
+  @@map("payout_lines")
+}
+
+// One try at a transfer, with its own reference for the bank (SPEC 12: retries
+// use new idempotent references). The bank details used are copied, masked.
+model PayoutAttempt {
+  id            String       @id @default(uuid()) @db.Uuid
+  itemId        String       @map("item_id") @db.Uuid
+  reference     String       @unique
+  status        PayoutStatus @default(PENDING)
+  holderName    String       @map("holder_name")
+  accountLast4  String       @map("account_last4")
+  ifsc          String
+  bankReference String?      @map("bank_reference")
+  failureReason String?      @map("failure_reason")
+  // The admin who recorded the outcome.
+  recordedById  String?      @map("recorded_by_id") @db.Uuid
+  createdAt     DateTime     @map("created_at") @db.Timestamptz(3)
+  finishedAt    DateTime?    @map("finished_at") @db.Timestamptz(3)
+
+  item       PayoutItem @relation(fields: [itemId], references: [id])
+  recordedBy User?      @relation(fields: [recordedById], references: [id])
+
+  @@index([itemId, createdAt])
+  @@map("payout_attempts")
 }

@@ -158,7 +158,7 @@ describe('preferences', () => {
     const initial = await request(ctx.app)
       .get(`${API}/me/notification-preferences`)
       .set(seller.bearer);
-    expect(initial.body.items).toHaveLength(7);
+    expect(initial.body.items).toHaveLength(8);
     expect(initial.body.items.find((c) => c.category === 'ORDERS')).toMatchObject({
       critical: true,
       inApp: true,

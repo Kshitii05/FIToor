@@ -36,7 +36,7 @@ const ACTIVE = [
 ];
 const BEFORE_DISPATCH = ['AWAITING_DISPATCH', 'AWAITING_PICKUP'];
 
-const orderInclude = {
+export const orderInclude = {
   items: true,
   disputes: {
     include: { evidence: { orderBy: { createdAt: 'asc' } } },

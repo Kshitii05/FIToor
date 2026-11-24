@@ -4,7 +4,7 @@ import { env } from '../../config/env.js';
 import { REFRESH_REUSE_GRACE_SECONDS, REFRESH_TOKEN_TTL_DAYS } from '../../config/policy.js';
 import { REFRESH_COOKIE_NAME } from '../../config/security.js';
 import { signAccessToken } from '../../lib/auth.js';
-import { addDays, addSeconds } from '../../lib/clock.js';
+import { addDays, addSeconds, businessDate } from '../../lib/clock.js';
 import { AppError } from '../../lib/errors.js';
 
 // Refresh tokens are random, so a plain SHA-256 is enough to keep them out of the database.
@@ -18,6 +18,17 @@ function newRefreshToken() {
 
 function invalidSession() {
   return AppError.unauthorized('Session expired or invalid');
+}
+
+/**
+ * Notes that the person was active today (business time zone), once per day: the
+ * source of the active-user counts (I101). `client` may be a transaction client.
+ */
+export async function recordActivity(client, now, userId) {
+  const day = businessDate(now);
+  await client.$executeRaw`
+    INSERT INTO user_activity_days (user_id, day) VALUES (${userId}::uuid, ${day}::date)
+    ON CONFLICT DO NOTHING`;
 }
 
 /** Starts a session. `client` may be a transaction client. */
@@ -34,6 +45,7 @@ export async function createSession(client, clock, { userId, userAgent, ipAddres
       ipAddress: ipAddress ?? null,
     },
   });
+  await recordActivity(client, now, userId);
 
   return {
     accessToken: signAccessToken({ userId, sessionId: session.id }, clock),
@@ -88,6 +100,7 @@ export async function rotateSession(db, clock, refreshToken) {
     },
   });
   if (count !== 1) throw invalidSession();
+  await recordActivity(db, now, session.userId);
 
   return {
     accessToken: signAccessToken({ userId: session.userId, sessionId: session.id }, clock),

@@ -119,6 +119,18 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I97 | Email retries | An email job is tried 3 times, waiting 30 seconds, then longer each time; failures are logged. Finished jobs are kept 7 days so their ids stay taken. | PROVISIONAL |
 | I98 | Keeping notifications | Read notifications are deleted 90 days after they were read; unread ones are kept. | PROVISIONAL |
 | I99 | Codes stay out | Sign-in, verification and password reset codes, and account deletion emails, stay direct emails and never appear in the notification list. | PROVISIONAL |
+| I100 | Admin step | One Super Admin role (USER / ADMIN) checked on the server for every `/admin` request. Admin lists are paginated with search, date filters (whole days, India time) and `?format=csv`. Every admin action needs a written reason and writes an append-only audit row; the audit log can be searched and exported. | PROVISIONAL |
+| I101 | Active users | A person counts as active on a day they signed in or refreshed their session (one row per person per day). Inactive: no activity in the last 30 days of the period. | PROVISIONAL |
+| I102 | Suspend and ban | One SUSPENDED status, restorable by an admin with a reason. Suspending ends every session, refuses sign-in and hides the listings from every public list. A ban is a suspension that also removes the listings; restoring the account does not bring removed listings back. Open orders and rentals are not changed automatically: the admin handles each one. Admin accounts and your own account cannot be suspended here. A warning is a notification and an email, with an audit row. | PROVISIONAL |
+| I103 | Restoring a listing | A removed listing goes back to the status it had before removal (paused if unknown), so the seller decides when it is live again. | PROVISIONAL |
+| I104 | Refund retry | An admin can retry a refund: one never accepted by the gateway is sent again under the same reference; one the gateway reported failed is replaced by a new refund for the same amount and parts. Money moves and is recorded once. | PROVISIONAL |
+| I105 | Bank details | Account number encrypted (AES-256-GCM, key `BANK_DETAILS_KEY`), only the last 4 digits shown, to sellers and admins alike. Any change needs a new admin check. The full number appears only in a batch's bank file, and every download is audit logged. | PROVISIONAL |
+| I106 | Payout batches | Built every Monday at 10:00 India time by the scheduled job (or by an admin), only when no batch is open; target 3 business days, then the admins are notified. One item per seller, one line per order or booking (unique in the database, so nothing is paid twice). The admin transfers by hand, then records each item paid (with the bank reference) or failed. Paid writes SELLER_PAYOUT ledger rows once. | PROVISIONAL |
+| I107 | Payout eligibility | COMPLETED order or rental, no unfinished dispute, not paid before, seller ACTIVE with VERIFIED bank details, net seller payable in the ledger above zero. Suspended sellers' payouts are held. | PROVISIONAL |
+| I108 | Failed payouts | The seller is notified and their bank details need a new check. A retry is allowed only after an admin verifies them again, and uses a new reference (`<item>-R1`, `-R2`…). | PROVISIONAL |
+| I109 | Deletion and payouts | Payouts in progress or failed, or completed earnings not yet paid, block account deletion (completes I16). Erasing an account deletes its bank details; payout records keep only the masked copy. | PROVISIONAL |
+| I110 | Money metrics | Completed transactions only, dated by completion, from their ledger rows. GMV: what buyers paid less refunds (items or rental fee plus delivery; deposits and deposit deductions excluded). Platform revenue: commission less reversals. Seller net: seller payable less reversals (deposit deductions included); gross: net plus commission. Gateway fees are shown as a cost, never charged to sellers. | PROVISIONAL |
+| I111 | Other analytics | Popular categories and areas count completed transactions; areas use the listing's public locality only. Average transaction value is GMV ÷ count, rounded down to whole paise. Ranges are whole days, at most 366, grouped by day, week or month. CSV only; PDF export is Phase 2. | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -140,6 +152,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-24 — Added I100–I111 while building admin, payouts and analytics (Modules 10, 11).
 - 2026-11-24 — Added I91–I99 while building notifications (Module 9).
 - 2026-11-24 — Added I79–I90 while building disputes, reviews and reports (Module 7).
 - 2026-11-20 — Added I68–I78 while building messaging and offers (Module 8).

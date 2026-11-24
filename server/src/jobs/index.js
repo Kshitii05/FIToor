@@ -6,6 +6,7 @@ import { runRentalJobs } from '../modules/rentals/rental.jobs.js';
 import { runOfferJobs } from '../modules/messaging/offers.service.js';
 import { runDisputeJobs } from '../modules/disputes/disputes.service.js';
 import { runNotificationJobs } from '../modules/notifications/notifications.service.js';
+import { runPayoutJobs } from '../modules/payouts/payouts.service.js';
 import { purgeExpiredDeletions } from '../modules/users/deletion.service.js';
 
 const QUEUE_NAME = 'maintenance';
@@ -31,7 +32,8 @@ export async function startJobs(deps) {
   );
   // Checkout expiry, dispatch, receipt and issue deadlines, refund retries, and the
   // rental deadlines (holds, payment window, return reminders, inspection, claims),
-  // offers running out, and dispute deadlines (answers, appeal windows, evidence).
+  // offers running out, dispute deadlines (answers, appeal windows, evidence), and
+  // the weekly payout batch and its 3-business-day target.
   await queue.upsertJobScheduler(
     ORDER_DEADLINES,
     { every: ORDER_JOBS_INTERVAL_SECONDS * 1000 },
@@ -53,6 +55,7 @@ export async function startJobs(deps) {
           offers: await runOfferJobs(deps),
           disputes: await runDisputeJobs(deps),
           notifications: await runNotificationJobs(deps),
+          payouts: await runPayoutJobs(deps),
         };
       }
       throw new Error(`Unknown job: ${job.name}`);
