@@ -6,6 +6,8 @@ import { AddToCart } from '../components/orders/AddToCart.jsx';
 import { ContactSeller } from '../components/chat/MakeOffer.jsx';
 import { ClosedDates } from '../components/rentals/ClosedDates.jsx';
 import { RentPanel } from '../components/rentals/RentPanel.jsx';
+import { ReportButton } from '../components/reports/ReportButton.jsx';
+import { RatingBadge } from '../components/reviews/ReviewList.jsx';
 import { StatusBadge } from '../components/listings/ListingCard.jsx';
 import { Alert, Button, ButtonLink, Card, Loading } from '../components/ui/index.js';
 import { api } from '../lib/api.js';
@@ -401,6 +403,12 @@ export default function ListingDetailPage() {
               {listing.mode === 'SALE' ? 'Seller' : 'Owner'}
             </h2>
             <SellerCard seller={listing.seller} />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <RatingBadge userId={listing.seller.id} />
+              {isOwner ? null : (
+                <ReportButton targetType="LISTING" targetId={listing.id} label="Report listing" />
+              )}
+            </div>
           </section>
         </div>
       </div>

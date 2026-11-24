@@ -3,6 +3,8 @@ import { GuestOnly, RequireAuth } from './auth/guards.jsx';
 import { AppLayout } from './components/layout/AppLayout.jsx';
 import BuyerOrderPage from './pages/BuyerOrderPage.jsx';
 import CartPage from './pages/CartPage.jsx';
+import DisputePage from './pages/DisputePage.jsx';
+import DisputesPage from './pages/DisputesPage.jsx';
 import CheckoutPage from './pages/CheckoutPage.jsx';
 import EditListingPage from './pages/EditListingPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
@@ -49,6 +51,8 @@ export default function App() {
           <Route path="liked" element={<LikedPage />} />
           <Route path="cart" element={<CartPage />} />
           <Route path="messages" element={<MessagesPage />} />
+          <Route path="disputes" element={<DisputesPage />} />
+          <Route path="disputes/:id" element={<DisputePage />} />
           <Route path="messages/:id" element={<MessagesPage />} />
           <Route path="checkout/:id" element={<CheckoutPage />} />
           <Route path="orders" element={<OrdersListPage key="buyer" side="buyer" />} />

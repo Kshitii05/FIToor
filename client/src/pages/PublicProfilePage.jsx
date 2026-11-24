@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useAuth } from '../auth/authContext.js';
 import { ListingGrid } from '../components/listings/ListingCard.jsx';
+import { ReportButton } from '../components/reports/ReportButton.jsx';
+import { ReviewList } from '../components/reviews/ReviewList.jsx';
 import {
   Alert,
   ButtonLink,
@@ -22,6 +25,7 @@ function initials(name) {
 
 export default function PublicProfilePage() {
   const { id } = useParams();
+  const { user: me } = useAuth();
   // Keyed by id, so a result for a previous profile is never shown for the current one.
   const [result, setResult] = useState({ id: null });
 
@@ -87,10 +91,16 @@ export default function PublicProfilePage() {
         {user.bio ? (
           <p className="mt-5 whitespace-pre-line break-words text-ink">{user.bio}</p>
         ) : null}
+        {me && me.id !== user.id ? (
+          <div className="mt-4">
+            <ReportButton targetType="USER" targetId={user.id} label="Report this person" />
+          </div>
+        ) : null}
       </Card>
 
       {/* Remounted per profile so paging starts again at the first page. */}
       <SellerListings key={user.id} sellerId={user.id} />
+      <ReviewList key={`reviews-${user.id}`} userId={user.id} />
     </div>
   );
 }

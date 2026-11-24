@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { MessageButton } from '../components/chat/MessageButton.jsx';
+import { DisputeLinks } from '../components/disputes/DisputeLink.jsx';
+import { ReviewPrompt } from '../components/reviews/ReviewPrompt.jsx';
 import { useParams } from 'react-router-dom';
 import {
   AddressBlock,
@@ -57,6 +59,8 @@ export default function SellerOrderPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5">
       <OrderHeading order={order} side="seller" />
+      <DisputeLinks disputes={order.disputes} />
+      {order.status === 'COMPLETED' ? <ReviewPrompt about={{ orderId: order.id }} /> : null}
 
       {order.dispatchOverdue && order.status === 'AWAITING_DISPATCH' ? (
         <Alert tone="notice" title="This order is late">

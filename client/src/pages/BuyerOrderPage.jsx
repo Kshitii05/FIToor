@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { MessageButton } from '../components/chat/MessageButton.jsx';
+import { DisputeLinks } from '../components/disputes/DisputeLink.jsx';
+import { ReviewPrompt } from '../components/reviews/ReviewPrompt.jsx';
 import { PointMap } from '../components/map/Maps.jsx';
 import {
   AddressBlock,
@@ -256,6 +258,8 @@ export default function BuyerOrderPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5">
       <OrderHeading order={order} side="buyer" />
+      <DisputeLinks disputes={order.disputes} />
+      {order.status === 'COMPLETED' ? <ReviewPrompt about={{ orderId: order.id }} /> : null}
 
       {order.cancellationOffered ? (
         <Alert tone="notice" title="The seller has not sent this yet">

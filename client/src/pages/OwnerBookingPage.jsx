@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { MessageButton } from '../components/chat/MessageButton.jsx';
+import { DisputeLinks } from '../components/disputes/DisputeLink.jsx';
+import { ReviewPrompt } from '../components/reviews/ReviewPrompt.jsx';
 import { AddressBlock } from '../components/orders/OrderParts.jsx';
 import {
   BookingDates,
@@ -274,6 +276,8 @@ export default function OwnerBookingPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5">
       <BookingHeading booking={booking} side="owner" />
+      <DisputeLinks disputes={booking.disputes} />
+      {booking.status === 'COMPLETED' ? <ReviewPrompt about={{ bookingId: booking.id }} /> : null}
       {note ? (
         <Alert tone={note[0]} title={note[1]}>
           {note[2]}

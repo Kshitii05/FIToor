@@ -84,6 +84,7 @@ const MENU_LINKS = [
   ['/sales', 'My sales'],
   ['/rentals', 'My rentals'],
   ['/rented-out', 'Rented out'],
+  ['/disputes', 'Disputes'],
   ['/my-listings', 'My listings'],
   ['/liked', 'Liked'],
   ['/profile', 'Profile'],

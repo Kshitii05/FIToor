@@ -14,6 +14,7 @@ import {
 import { photoProblem } from '../../lib/listingForm.js';
 import { formatPaise } from '../../lib/money.js';
 import { Alert, Button, Loading } from '../ui/index.js';
+import { ReportButton } from '../reports/ReportButton.jsx';
 import { OfferCard } from './OfferCard.jsx';
 
 function Ticks({ message, conversation }) {
@@ -96,6 +97,9 @@ function Bubble({ message, me, conversation, onOffer }) {
           {messageTime(message.createdAt)}
           {mine ? <Ticks message={message} conversation={conversation} /> : null}
         </p>
+        {mine ? null : (
+          <ReportButton targetType="MESSAGE" targetId={message.id} label="Report" compact />
+        )}
       </div>
     </li>
   );
