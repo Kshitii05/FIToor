@@ -16,7 +16,6 @@ import { uploadImages } from '../../lib/upload.js';
 import {
   adminCancel,
   adminResetHandover,
-  adminResolveIssue,
   adminVerifyDelivery,
   answerExtension,
   cancelBeforeDispatch,
@@ -76,17 +75,6 @@ const issueSchema = z.strictObject({
     .min(ISSUE_DESCRIPTION_MIN_LENGTH)
     .max(ISSUE_DESCRIPTION_MAX_LENGTH),
 });
-const resolveSchema = z
-  .strictObject({
-    resolution: z.enum(['FULL_REFUND', 'PARTIAL_REFUND', 'REJECTED']),
-    refundPaise: z.number().int().positive().optional(),
-    reason: requiredReason.shape.reason,
-  })
-  .refine((value) => value.resolution !== 'PARTIAL_REFUND' || value.refundPaise !== undefined, {
-    message: 'Enter the amount to refund',
-    path: ['refundPaise'],
-  });
-
 const photos = uploadImages({
   fieldName: 'photos',
   maxFiles: ISSUE_PHOTOS_MAX,
@@ -204,10 +192,6 @@ export function createAdminOrdersRouter(deps) {
   router.post('/:id/cancel', async (req, res) => {
     const { reason } = requiredReason.parse(req.body ?? {});
     reply(res, await adminCancel(deps, await load(req), req.auth.userId, reason));
-  });
-  router.post('/:id/resolve-issue', async (req, res) => {
-    const input = resolveSchema.parse(req.body ?? {});
-    reply(res, await adminResolveIssue(deps, await load(req), req.auth.userId, input));
   });
   router.post('/:id/reset-handover-code', async (req, res) => {
     const { reason } = requiredReason.parse(req.body ?? {});

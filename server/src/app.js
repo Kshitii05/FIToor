@@ -53,6 +53,17 @@ import {
   createOffersRouter,
 } from './modules/messaging/messaging.routes.js';
 import { createRealtimeHub } from './modules/messaging/realtime.js';
+import {
+  createAdminDisputesRouter,
+  createDisputesRouter,
+} from './modules/disputes/disputes.routes.js';
+import {
+  createAdminModerationRouter,
+  createMyReviewsRouter,
+  createReportsRouter,
+  createReviewsRouter,
+  createUserReviewsRouter,
+} from './modules/reviews/reviews.routes.js';
 import { createMeRouter, createUsersRouter } from './modules/users/users.routes.js';
 
 /**
@@ -143,9 +154,16 @@ export function createApp({
   api.use('/conversations', createConversationsRouter(deps));
   api.use('/offers', createOffersRouter(deps));
   api.use('/blocks', createBlocksRouter(deps));
+  api.use('/disputes', createDisputesRouter(deps));
+  api.use('/admin/disputes', createAdminDisputesRouter(deps));
+  api.use('/reviews', createReviewsRouter(deps));
+  api.use('/me/reviews', createMyReviewsRouter(deps));
+  api.use('/reports', createReportsRouter(deps));
+  api.use('/admin', createAdminModerationRouter(deps));
   api.use('/me', createMeRouter(deps));
   api.use('/me', createMyDiscoveryRouter(deps));
   api.use('/users', createSellerListingsRouter(deps));
+  api.use('/users', createUserReviewsRouter(deps));
   api.use('/users', createUsersRouter(deps));
   configureRoutes?.(api);
   app.use(API_PREFIX, api);

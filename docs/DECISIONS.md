@@ -98,6 +98,18 @@ These are suggested defaults so development can proceed. They are `PROVISIONAL` 
 | I76 | Contact details in chat | Chat never shows phone numbers or emails. Phone numbers (10 or more digits) and email addresses typed into a message are stored as [hidden] unless the two people already have a paid order or rental between them. | PROVISIONAL |
 | I77 | Messaging rate limits | Counted per person and per IP address: 30 messages a minute, 10 offers or counters an hour, 20 new chats an hour, 30 blocks an hour. | PROVISIONAL |
 | I78 | Live chat servers | Socket.IO runs in the single API process in the MVP. Connections need a valid access token, checked like an API request. Running several processes needs a shared adapter (Redis), a Step 11 item. | PROVISIONAL |
+| I79 | One dispute flow | Every post-sale problem is a dispute of one of four kinds, about one order or one rental booking: a problem with the item (7-day window), "it did not arrive" (opened by the buyer, or by the system after 48 hours of silence), a rental deposit dispute (damage claimed by the owner and/or a late fee disputed by the renter), and "not returned". At most one unfinished dispute per order or booking (database index). The order issue and rental claim records of Steps 5 and 6 were carried over into it. | PROVISIONAL |
+| I80 | Answer window and review target | The other side has 48 hours to agree or answer with evidence; answering, or 48 hours passing, sends it to an admin, with a target of 5 business days. Disputes past the target are flagged for the admin queue. | PROVISIONAL |
+| I81 | When a decision takes effect | An admin decision takes effect when the 3-day appeal window ends, or straight after the appeal is decided. Until then the order or booking stays on hold and is not payout-eligible. | PROVISIONAL |
+| I82 | Agreement | When the other side agrees (the seller agrees to refund, the renter accepts a claim, the owner waives a disputed late fee, the renter admits a non-return) it takes effect at once and cannot be appealed. A rental deposit dispute that mixes a damage claim with a disputed late fee cannot be agreed to or withdrawn; an admin decides it. | PROVISIONAL |
+| I83 | Appeals | Either side may appeal once per dispute, with a written reason, within 3 days of the decision. An admin either upholds the decision or replaces it; that decision is final and takes effect at once. | PROVISIONAL |
+| I84 | Evidence | Both sides can add text (up to 2,000 characters) and up to 5 photos per entry while the dispute is open, under review or appealed. Photos are deleted 180 days after the dispute ends (SPEC 15); the written record stays. | PROVISIONAL |
+| I85 | Payout holds | An order or rental with any unfinished dispute (including one in its appeal window) is not payout-eligible. | PROVISIONAL |
+| I86 | Who can review | Only the two sides of a completed order or rental, within 30 days of completion, one review each per transaction (database unique index). Reviews cannot be edited. | PROVISIONAL |
+| I87 | Rating dimensions | Overall, communication and delivery/handover are always rated 1–5; the item's condition is rated too, except when a seller reviews a buyer. Optional text up to 1,000 characters and up to 4 photos. | PROVISIONAL |
+| I88 | Publishing and moderation | Reviews publish at once with a verified-transaction badge. Reported reviews stay published until an admin hides them, with a reason; admins can show them again. Hidden reviews leave the averages. | PROVISIONAL |
+| I89 | Reports | A person, a listing, a chat message (by the other person in that chat) or a review can be reported with a set reason (prohibited item, counterfeit, scam, harassment, inappropriate, spam, other) and optional details. One open report per reporter and target. Reporting never removes anything by itself. | PROVISIONAL |
+| I90 | Report actions | An admin dismisses a report, hides the reported review, or removes the reported listing, always with a reason and an audit log entry; an action resolves every open report about the same thing. Warning and suspending users come with the admin step (Step 10). | PROVISIONAL |
 
 ## 3. External verification gates
 
@@ -119,6 +131,7 @@ Rules while these are open:
 
 ## Change log
 
+- 2026-11-24 — Added I79–I90 while building disputes, reviews and reports (Module 7).
 - 2026-11-20 — Added I68–I78 while building messaging and offers (Module 8).
 - 2026-11-13 — Added I59–I67 while building rentals, deposits, returns and inspection (Module 4).
 - 2026-11-13 — Added I47–I58 while building cart, checkout, payments and orders (Module 3).

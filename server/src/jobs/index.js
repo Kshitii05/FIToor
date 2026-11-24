@@ -4,6 +4,7 @@ import { createRedisConnection } from '../lib/redis.js';
 import { runOrderJobs } from '../modules/orders/order.jobs.js';
 import { runRentalJobs } from '../modules/rentals/rental.jobs.js';
 import { runOfferJobs } from '../modules/messaging/offers.service.js';
+import { runDisputeJobs } from '../modules/disputes/disputes.service.js';
 import { purgeExpiredDeletions } from '../modules/users/deletion.service.js';
 
 const QUEUE_NAME = 'maintenance';
@@ -29,7 +30,7 @@ export async function startJobs(deps) {
   );
   // Checkout expiry, dispatch, receipt and issue deadlines, refund retries, and the
   // rental deadlines (holds, payment window, return reminders, inspection, claims),
-  // and offers running out.
+  // offers running out, and dispute deadlines (answers, appeal windows, evidence).
   await queue.upsertJobScheduler(
     ORDER_DEADLINES,
     { every: ORDER_JOBS_INTERVAL_SECONDS * 1000 },
@@ -49,6 +50,7 @@ export async function startJobs(deps) {
           orders: await runOrderJobs(deps),
           rentals: await runRentalJobs(deps),
           offers: await runOfferJobs(deps),
+          disputes: await runDisputeJobs(deps),
         };
       }
       throw new Error(`Unknown job: ${job.name}`);

@@ -2,6 +2,7 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  APPEAL_WINDOW_DAYS,
   HANDOVER_MAX_ATTEMPTS,
   RECEIPT_WINDOW_HOURS,
   ISSUE_REPORT_WINDOW_DAYS,
@@ -10,7 +11,6 @@ import { addBusinessDays } from '../../lib/clock.js';
 import { createTestContext, db, registerVerifiedUser, resetDb } from '../../../test/helpers.js';
 import {
   addToCart,
-  adminAction,
   buyerAction,
   buyerView,
   ledgerTotals,
@@ -27,6 +27,7 @@ import {
 } from '../../../test/orders.js';
 import { PNG } from '../../../test/listings.js';
 import { runOrderJobs } from './order.jobs.js';
+import { adminDispute, runDisputeJobs } from '../../../test/disputes.js';
 
 beforeEach(resetDb);
 afterAll(() => db.$disconnect());
@@ -253,15 +254,21 @@ describe('6. delivery confirmation', () => {
     await jobs(ctx);
     expect((await db.order.findUnique({ where: { id: order.id } })).status).toBe('ADMIN_REVIEW');
 
+    // A dispute opened for the buyer; an admin decides it, with a reason, and it
+    // takes effect after the appeal window (Step 8).
     const fresh = await signInAgain(ctx, admin);
-    const noReason = await adminAction(ctx, fresh, order.id, 'verify-delivery', {});
+    const dispute = await db.dispute.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(dispute).toMatchObject({ kind: 'NOT_DELIVERED', openedByClaimant: false });
+    const noReason = await adminDispute(ctx, fresh, dispute.id, 'decide', { outcome: 'DELIVERED' });
     expect(noReason.status).toBe(400);
-    const verified = await adminAction(ctx, fresh, order.id, 'verify-delivery', {
+    const verified = await adminDispute(ctx, fresh, dispute.id, 'decide', {
+      outcome: 'DELIVERED',
       reason: 'Courier proof of delivery checked',
     });
     expect(verified.status).toBe(200);
-    expect(verified.body.order.status).toBe('DELIVERED');
-    expect(await db.adminAuditLog.count({ where: { targetId: order.id } })).toBe(1);
+    expect(await db.adminAuditLog.count({ where: { targetId: dispute.id } })).toBe(1);
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
     expect((await buyerView(ctx, await signInAgain(ctx, buyer), order.id)).status).toBe(
       'DELIVERED',
     );
@@ -341,19 +348,22 @@ describe('8. issues after delivery', () => {
     expect(blocked.status).toBe('ISSUE_OPEN');
     expect(blocked.payoutEligible).toBe(false);
 
-    const resolved = await adminAction(
-      ctx,
-      await signInAgain(ctx, admin),
-      order.id,
-      'resolve-issue',
-      {
-        resolution: 'PARTIAL_REFUND',
-        refundPaise: 50000,
-        reason: 'Damage confirmed from photos; seller agreed to a partial refund',
-      },
-    );
+    const dispute = await db.dispute.findFirstOrThrow({ where: { orderId: order.id } });
+    const resolved = await adminDispute(ctx, await signInAgain(ctx, admin), dispute.id, 'decide', {
+      outcome: 'PARTIAL_REFUND',
+      refundPaise: 50000,
+      reason: 'Damage confirmed from photos; seller agreed to a partial refund',
+    });
     expect(resolved.status).toBe(200);
-    expect(resolved.body.order.status).toBe('COMPLETED');
+    // Payout stays on hold through the appeal window, then the refund goes out.
+    expect((await sellerView(ctx, await signInAgain(ctx, seller), order.id)).payoutEligible).toBe(
+      false,
+    );
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    const after = await sellerView(ctx, await signInAgain(ctx, seller), order.id);
+    expect(after.status).toBe('COMPLETED');
+    expect(after.payoutEligible).toBe(true);
     expect(await ledgerTotals({ orderId: order.id })).toMatchObject({
       COMMISSION: 12000,
       BUYER_REFUND: 50000,

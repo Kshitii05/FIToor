@@ -39,9 +39,20 @@ export const CLAIM_PHOTOS_MIN = 1;
 export const CLAIM_DESCRIPTION_MIN_LENGTH = 10;
 export const BLOCKED_RANGES_MAX = 20;
 
-// Disputes (DECISIONS I13, PROVISIONAL)
+// Disputes (SPEC 13, 15; DECISIONS I13, I79 to I85, PROVISIONAL)
 export const APPEAL_WINDOW_DAYS = 3;
 export const APPEALS_PER_DISPUTE = 1;
+export const DISPUTE_RESPONSE_HOURS = 48; // the other side answers, then an admin reviews
+export const DISPUTE_REVIEW_BUSINESS_DAYS = 5; // admin target for a decision
+export const DISPUTE_EVIDENCE_RETENTION_DAYS = 180; // photos kept after a dispute closes
+export const EVIDENCE_PHOTOS_MAX = 5;
+export const EVIDENCE_TEXT_MAX_LENGTH = 2000;
+
+// Reviews and reports (SPEC Module 7; DECISIONS I86 to I90, PROVISIONAL)
+export const REVIEW_WINDOW_DAYS = 30; // after the order or rental completes
+export const REVIEW_TEXT_MAX_LENGTH = 1000;
+export const REVIEW_PHOTOS_MAX = 4;
+export const REPORT_DETAILS_MAX_LENGTH = 1000;
 
 // Accounts
 export const ACCOUNT_RECOVERY_DAYS = 30; // SPEC 15, DECISIONS I16
@@ -82,6 +93,9 @@ export const RATE_LIMITS = Object.freeze({
   offer: Object.freeze({ windowMinutes: 60, max: 10 }),
   conversation: Object.freeze({ windowMinutes: 60, max: 20 }),
   block: Object.freeze({ windowMinutes: 60, max: 30 }),
+  report: Object.freeze({ windowMinutes: 60, max: 10 }),
+  review: Object.freeze({ windowMinutes: 60, max: 10 }),
+  evidence: Object.freeze({ windowMinutes: 60, max: 30 }),
 });
 
 // Messaging and offers (SPEC Module 8; DECISIONS I68 to I78, PROVISIONAL)

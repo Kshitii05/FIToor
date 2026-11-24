@@ -1,7 +1,6 @@
 import {
   BLOCKED_RANGES_MAX,
   CLAIM_PHOTOS_MIN,
-  CLAIM_RESPONSE_HOURS,
   DEPOSIT_AUTO_REFUND_AFTER_RETURN_HOURS,
   HANDOVER_MAX_ATTEMPTS,
   LATE_FEE_GRACE_HOURS,
@@ -28,6 +27,13 @@ import {
 } from '../listings/listings.service.js';
 import { createRefund, processRefund } from '../payments/refunds.service.js';
 import { registerDeletionBlocker } from '../users/deletion.service.js';
+import {
+  announceOpened,
+  evidencePhotos,
+  openDispute,
+  recordEvidence,
+  UNFINISHED,
+} from '../disputes/dispute.records.js';
 import { notifyBooking } from './rental.emails.js';
 import {
   bookingRef,
@@ -67,7 +73,10 @@ const WITH_ITEM = ['CONFIRMED', 'ACTIVE'];
 
 const person = { select: { id: true, phone: true, profile: { select: { displayName: true } } } };
 export const bookingInclude = {
-  claim: true,
+  disputes: {
+    include: { evidence: { orderBy: { createdAt: 'asc' } } },
+    orderBy: { createdAt: 'asc' },
+  },
   listing: { select: { locality: true } },
   renter: person,
   owner: person,
@@ -95,7 +104,13 @@ function renterActions(b, now) {
   if (b.status === 'APPROVED' && b.paymentDueAt > now) actions.push('pay');
   if ([...UNPAID_OPEN, 'CONFIRMED'].includes(b.status)) actions.push('cancel');
   if (b.status === 'ACTIVE') actions.push('return');
-  if (b.status === 'CLAIM_OPEN' && b.claim?.status === 'OPEN' && b.claim.respondDueAt > now)
+  const claim = depositClaim(b);
+  if (
+    b.status === 'CLAIM_OPEN' &&
+    claim?.claimantIsOwner &&
+    claim.status === 'OPEN' &&
+    claim.respondDueAt > now
+  )
     actions.push('claim-response');
   if (['RETURNED', 'CLAIM_OPEN'].includes(b.status) && b.lateFeePaise > 0 && !b.lateFeeDisputedAt)
     actions.push('dispute-late-fee');
@@ -117,20 +132,48 @@ function ownerActions(b, now) {
   return actions;
 }
 
-function claimView(claim) {
-  if (!claim) return null;
+const CLAIM_STATUS = {
+  OPEN: 'OPEN',
+  UNDER_REVIEW: 'DISPUTED',
+  DECIDED: 'DISPUTED',
+  APPEALED: 'DISPUTED',
+  RESOLVED: 'ACCEPTED',
+  CLOSED: 'DECIDED',
+  WITHDRAWN: 'WITHDRAWN',
+};
+
+/** The owner's damage claim, as the rental pages have shown it, read from the dispute. */
+function depositClaim(b) {
+  const dispute = (b.disputes ?? []).findLast(
+    (d) => d.kind === 'RENTAL_DEPOSIT' && d.claimedDamagePaise !== null,
+  );
+  if (!dispute) return null;
+  const ownerEntry = dispute.evidence?.find((e) => e.authorId === b.ownerId && e.photos?.length);
+  const renterEntry = dispute.evidence?.find((e) => e.authorId === b.renterId && e.text);
+  const decision = dispute.finalDecision ?? dispute.decision;
   return {
-    description: claim.description,
-    items: claim.items,
-    totalPaise: claim.totalPaise,
-    photos: claim.photos,
-    status: claim.status,
-    respondDueAt: iso(claim.respondDueAt),
-    renterResponse: claim.renterResponse,
-    decidedPaise: claim.decidedPaise,
-    decisionReason: claim.decisionReason,
+    disputeId: dispute.id,
+    claimantIsOwner: dispute.claimantId === b.ownerId,
+    description: dispute.description,
+    items: dispute.claimItems,
+    totalPaise: dispute.claimedDamagePaise,
+    photos: (ownerEntry?.photos ?? []).map(({ url, takenAt }) => ({ url, takenAt })),
+    status: CLAIM_STATUS[dispute.status],
+    respondDueAt: dispute.respondDueAt,
+    renterResponse: renterEntry?.text ?? null,
+    decidedPaise: decision?.damagePaise ?? null,
+    decisionReason: dispute.finalReason ?? dispute.decisionReason,
   };
 }
+
+function claimView(claim) {
+  if (!claim) return null;
+  const rest = { ...claim };
+  delete rest.claimantIsOwner;
+  return { ...rest, respondDueAt: iso(claim.respondDueAt) };
+}
+
+const hasUnfinishedDispute = (b) => (b.disputes ?? []).some((d) => UNFINISHED.includes(d.status));
 
 /** What the owner keeps: the fee left after refunds, less its commission, plus deductions. */
 function ownerEarnings(b) {
@@ -182,7 +225,13 @@ function commonView(b) {
     createdAt: iso(b.createdAt),
     handoverPhotos: b.handoverPhotos ?? [],
     returnPhotos: b.returnPhotos ?? [],
-    claim: claimView(b.claim),
+    claim: claimView(depositClaim(b)),
+    disputes: (b.disputes ?? []).map((d) => ({
+      id: d.id,
+      ref: d.ref,
+      kind: d.kind,
+      status: d.status,
+    })),
   };
 }
 
@@ -228,7 +277,7 @@ export function toOwnerBooking(b, now) {
     ownerPayablePaise: b.ownerPayablePaise,
     ...ownerEarnings(b),
     // Payout-eligible once the deposit is settled with nothing open (I10).
-    payoutEligible: b.status === 'COMPLETED',
+    payoutEligible: b.status === 'COMPLETED' && !hasUnfinishedDispute(b),
     deliveryAddress: WITH_ITEM.includes(b.status) ? (b.deliveryAddress ?? null) : null,
     returnCode: b.status === 'ACTIVE' ? b.returnCode : null,
     handoverAttemptsLeft:
@@ -917,8 +966,8 @@ export async function reportNonReturn(deps, booking, reason) {
       `You can report it ${RENTAL_NON_RETURN_REPORT_DAYS} days after it was due back`,
     );
   }
-  await deps.db.$transaction((tx) =>
-    transition(tx, now, booking, {
+  await deps.db.$transaction(async (tx) => {
+    await transition(tx, now, booking, {
       from: ['ACTIVE'],
       to: 'ADMIN_REVIEW',
       data: { nonReturnReportedAt: now },
@@ -926,8 +975,17 @@ export async function reportNonReturn(deps, booking, reason) {
       action: 'NOT_RETURNED',
       reason,
       verb: 'reported',
-    }),
-  );
+    });
+    await openDispute(tx, now, {
+      kind: 'NOT_RETURNED',
+      bookingId: booking.id,
+      claimantId: booking.ownerId,
+      respondentId: booking.renterId,
+      description: reason || 'The owner says the item has not been returned.',
+      evidence: { authorId: booking.ownerId, text: reason || null },
+    });
+  });
+  await announceOpened(deps, { bookingId: booking.id, kind: 'NOT_RETURNED' });
   const updated = await loadBooking(deps.db, booking.id);
   await notifyBooking(deps, updated, 'renter', 'sentToReview');
   return updated;
@@ -995,23 +1053,31 @@ async function settle(
 }
 
 /**
- * After inspection (or an accepted claim): settle, unless the renter disputes the
- * late fee, which an admin then decides. In `tx`. Returns the refund, if any.
+ * After inspection: settle, unless a deposit dispute is still open (a disputed late
+ * fee), in which case the booking waits for it in ADMIN_REVIEW. In `tx`.
  */
 async function settleUnlessDisputed(tx, now, booking, { from, damagePaise, actor, action }) {
-  const lateFeePaise = booking.lateFeePaise ?? 0;
-  if (booking.lateFeeDisputedAt && lateFeePaise > 0) {
+  const open = await tx.dispute.findFirst({
+    where: { bookingId: booking.id, status: { in: UNFINISHED } },
+  });
+  if (open) {
     await transition(tx, now, booking, {
       from,
       to: 'ADMIN_REVIEW',
       data: { damagePaise },
       actor,
-      action: `${action}_LATE_FEE_DISPUTED`,
+      action: `${action}_DISPUTE_OPEN`,
       verb: 'settled',
     });
     return null;
   }
-  return settle(tx, now, booking, { from, lateFeePaise, damagePaise, actor, action });
+  return settle(tx, now, booking, {
+    from,
+    lateFeePaise: booking.lateFeePaise ?? 0,
+    damagePaise,
+    actor,
+    action,
+  });
 }
 
 /** After a settlement: send the refund and tell both sides. */
@@ -1081,7 +1147,10 @@ export async function settleAfterInspectionWindow(deps, bookingId) {
   return true;
 }
 
-/** Within 48 hours of the return: photos, a description and itemised costs. */
+/**
+ * Within 48 hours of the return: photos, a description and itemised costs. Opens a
+ * deposit dispute, or joins the renter's open late-fee dispute (one per booking).
+ */
 export async function fileClaim(deps, booking, { description, items }, files) {
   const now = deps.clock.now();
   const problem = inspectionOpen(booking, now);
@@ -1097,95 +1166,41 @@ export async function fileClaim(deps, booking, { description, items }, files) {
       reason: description,
       verb: 'claimed on',
     });
-    await tx.rentalClaim.create({
-      data: {
-        bookingId: booking.id,
-        description,
-        items,
-        totalPaise,
-        photos: photoRecords(stored, now),
-        respondDueAt: addHours(now, CLAIM_RESPONSE_HOURS),
-        createdAt: now,
-      },
+    const photos = evidencePhotos(stored, now);
+    const open = await tx.dispute.findFirst({
+      where: { bookingId: booking.id, status: { in: UNFINISHED } },
     });
+    if (open) {
+      await tx.dispute.update({
+        where: { id: open.id },
+        data: { claimItems: items, claimedDamagePaise: totalPaise },
+      });
+      await recordEvidence(tx, now, open.id, {
+        authorId: booking.ownerId,
+        role: open.claimantId === booking.ownerId ? 'CLAIMANT' : 'RESPONDENT',
+        text: description,
+        photos,
+      });
+    } else {
+      await openDispute(tx, now, {
+        kind: 'RENTAL_DEPOSIT',
+        bookingId: booking.id,
+        claimantId: booking.ownerId,
+        respondentId: booking.renterId,
+        description,
+        claimItems: items,
+        claimedDamagePaise: totalPaise,
+        evidence: { authorId: booking.ownerId, text: description, photos },
+      });
+    }
   });
+  await announceOpened(deps, { bookingId: booking.id, kind: 'RENTAL_DEPOSIT' });
   const updated = await loadBooking(deps.db, booking.id);
   await notifyBooking(deps, updated, 'renter', 'claimFiledRenter');
   return updated;
 }
 
-/** The renter accepts the claim (it is deducted) or disputes it (an admin decides). */
-export async function answerClaim(deps, booking, { accept, reason }) {
-  const now = deps.clock.now();
-  if (booking.status !== 'CLAIM_OPEN' || booking.claim?.status !== 'OPEN') {
-    throw new AppError(409, 'NO_OPEN_CLAIM', 'There is no claim to answer');
-  }
-  if (booking.claim.respondDueAt <= now) {
-    throw new AppError(409, 'CLAIM_RESPONSE_CLOSED', 'The time to answer this claim has ended');
-  }
-  const refund = await deps.db.$transaction(async (tx) => {
-    const { count } = await tx.rentalClaim.updateMany({
-      where: { bookingId: booking.id, status: 'OPEN' },
-      data: {
-        status: accept ? 'ACCEPTED' : 'DISPUTED',
-        renterResponse: reason ?? null,
-        respondedAt: now,
-      },
-    });
-    if (count !== 1) throw new AppError(409, 'NO_OPEN_CLAIM', 'There is no claim to answer');
-    if (accept) {
-      return settleUnlessDisputed(tx, now, booking, {
-        from: ['CLAIM_OPEN'],
-        damagePaise: booking.claim.totalPaise,
-        actor: renterActor(booking),
-        action: 'CLAIM_ACCEPTED',
-      });
-    }
-    await transition(tx, now, booking, {
-      from: ['CLAIM_OPEN'],
-      to: 'ADMIN_REVIEW',
-      actor: renterActor(booking),
-      action: 'CLAIM_DISPUTED',
-      reason,
-      verb: 'disputed',
-    });
-    return null;
-  });
-  const updated = await afterSettlement(deps, booking.id, refund);
-  await notifyBooking(deps, updated, 'owner', 'claimAnsweredOwner');
-  return updated;
-}
-
-/** No answer within 48 hours: the claim goes to an admin. Run on a schedule. */
-export async function claimUnanswered(deps, bookingId) {
-  const now = deps.clock.now();
-  const booking = await loadBooking(deps.db, bookingId);
-  if (booking.status !== 'CLAIM_OPEN' || booking.claim?.status !== 'OPEN') return false;
-  if (booking.claim.respondDueAt > now) return false;
-  const moved = await deps.db.$transaction(async (tx) => {
-    const { count } = await tx.rentalClaim.updateMany({
-      where: { bookingId, status: 'OPEN', respondDueAt: { lte: now } },
-      data: { status: 'NO_RESPONSE' },
-    });
-    if (count !== 1) return false;
-    await transition(tx, now, booking, {
-      from: ['CLAIM_OPEN'],
-      to: 'ADMIN_REVIEW',
-      actor: SYSTEM,
-      action: 'CLAIM_NOT_ANSWERED',
-      verb: 'reviewed',
-    });
-    return true;
-  });
-  if (moved) {
-    const updated = await loadBooking(deps.db, bookingId);
-    await notifyBooking(deps, updated, 'renter', 'sentToReview');
-    await notifyBooking(deps, updated, 'owner', 'sentToReview');
-  }
-  return moved;
-}
-
-/** The renter disputes the late fee; settlement then goes to an admin (SPEC 13). */
+/** The renter disputes the late fee: a deposit dispute (SPEC 13), or a note on the open one. */
 export async function disputeLateFee(deps, booking, reason) {
   const now = deps.clock.now();
   if (
@@ -1195,19 +1210,153 @@ export async function disputeLateFee(deps, booking, reason) {
   ) {
     throw new AppError(409, 'LATE_FEE_NOT_DISPUTABLE', 'There is no late fee to dispute');
   }
-  await deps.db.$transaction((tx) =>
-    transition(tx, now, booking, {
+  await deps.db.$transaction(async (tx) => {
+    await transition(tx, now, booking, {
       from: ['RETURNED', 'CLAIM_OPEN'],
       data: { lateFeeDisputedAt: now },
       actor: renterActor(booking),
       action: 'LATE_FEE_DISPUTED',
       reason,
       verb: 'disputed',
-    }),
-  );
+    });
+    const open = await tx.dispute.findFirst({
+      where: { bookingId: booking.id, status: { in: UNFINISHED } },
+    });
+    if (open) {
+      await tx.dispute.update({ where: { id: open.id }, data: { lateFeeDisputed: true } });
+      await recordEvidence(tx, now, open.id, {
+        authorId: booking.renterId,
+        role: 'RESPONDENT',
+        text: `Disputes the late fee: ${reason}`,
+      });
+    } else {
+      await openDispute(tx, now, {
+        kind: 'RENTAL_DEPOSIT',
+        bookingId: booking.id,
+        claimantId: booking.renterId,
+        respondentId: booking.ownerId,
+        description: reason,
+        lateFeeDisputed: true,
+        evidence: { authorId: booking.renterId, text: reason },
+      });
+    }
+  });
   const updated = await loadBooking(deps.db, booking.id);
   await notifyBooking(deps, updated, 'owner', 'lateFeeDisputedOwner');
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Effects of dispute outcomes (called by the dispute module, which audits them)
+// ---------------------------------------------------------------------------
+
+const DISPUTE_STATES = ['RETURNED', 'CLAIM_OPEN', 'ADMIN_REVIEW'];
+
+/** Takes the decided damage and late fee from the deposit and refunds the rest. */
+export async function settleDeposit(deps, booking, { damagePaise, lateFeePaise }, actor, reason) {
+  const now = deps.clock.now();
+  const refund = await deps.db.$transaction((tx) =>
+    settle(tx, now, booking, {
+      from: DISPUTE_STATES,
+      lateFeePaise,
+      damagePaise,
+      actor,
+      action: 'DISPUTE_SETTLED',
+      reason,
+    }),
+  );
+  return afterSettlement(deps, booking.id, refund);
+}
+
+/** A deposit dispute went to an admin: a claim waiting for the renter now waits for review. */
+export async function moveClaimToReview(deps, booking) {
+  if (booking.status !== 'CLAIM_OPEN') return booking;
+  const now = deps.clock.now();
+  await deps.db.$transaction((tx) =>
+    transition(tx, now, booking, {
+      from: ['CLAIM_OPEN'],
+      to: 'ADMIN_REVIEW',
+      actor: SYSTEM,
+      action: 'DISPUTE_TO_REVIEW',
+      verb: 'reviewed',
+    }),
+  );
+  return loadBooking(deps.db, booking.id);
+}
+
+/**
+ * A deposit dispute ended without a settlement amount (withdrawn, or the late fee
+ * waived): carry on where the booking was. Before the inspection deadline a
+ * withdrawn claim returns the booking to inspection; otherwise it settles with
+ * the late fee as it now stands and no damage.
+ */
+export async function resumeDeposit(deps, booking, actor, { waiveLateFee = false } = {}) {
+  const now = deps.clock.now();
+  const lateFeePaise = waiveLateFee ? 0 : (booking.lateFeePaise ?? 0);
+  if (booking.status === 'RETURNED') {
+    if (waiveLateFee) {
+      await deps.db.$transaction((tx) =>
+        transition(tx, now, booking, {
+          from: ['RETURNED'],
+          data: { lateFeePaise: 0 },
+          actor,
+          action: 'LATE_FEE_WAIVED',
+          verb: 'changed',
+        }),
+      );
+    }
+    return loadBooking(deps.db, booking.id);
+  }
+  if (booking.status === 'CLAIM_OPEN' && booking.inspectionEndsAt > now) {
+    await deps.db.$transaction((tx) =>
+      transition(tx, now, booking, {
+        from: ['CLAIM_OPEN'],
+        to: 'RETURNED',
+        data: { lateFeePaise },
+        actor,
+        action: 'CLAIM_WITHDRAWN',
+        verb: 'changed',
+      }),
+    );
+    return loadBooking(deps.db, booking.id);
+  }
+  return settleDeposit(deps, booking, { damagePaise: 0, lateFeePaise }, actor, null);
+}
+
+/** "Not returned" decided as returned after all: the inspection window starts now. */
+export async function confirmReturned(deps, booking, actor, reason) {
+  const now = deps.clock.now();
+  await deps.db.$transaction((tx) =>
+    transition(tx, now, booking, {
+      from: ['ADMIN_REVIEW'],
+      to: 'RETURNED',
+      data: returnedData(booking, now),
+      actor,
+      action: 'RETURN_CONFIRMED',
+      reason,
+      verb: 'confirmed as returned',
+    }),
+  );
+  const updated = await loadBooking(deps.db, booking.id);
+  await notifyBooking(deps, updated, 'owner', 'returnedOwner');
+  await notifyBooking(deps, updated, 'renter', 'returnedRenter');
+  return updated;
+}
+
+/** The owner withdrew a "not returned" report: the rental is out again. */
+export async function resumeActive(deps, booking, actor) {
+  const now = deps.clock.now();
+  await deps.db.$transaction((tx) =>
+    transition(tx, now, booking, {
+      from: ['ADMIN_REVIEW'],
+      to: 'ACTIVE',
+      data: { nonReturnReportedAt: null },
+      actor,
+      action: 'NOT_RETURNED_WITHDRAWN',
+      verb: 'changed',
+    }),
+  );
+  return loadBooking(deps.db, booking.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1239,13 +1388,13 @@ export async function adminVerifyHandover(deps, booking, adminId, reason) {
   return updated;
 }
 
-/** When the return code cannot be used, or after a non-return report: the item is back. */
+/** When the return code cannot be used: the admin confirms the return. */
 export async function adminVerifyReturn(deps, booking, adminId, reason) {
   const now = deps.clock.now();
   if (booking.returnedAt) throw wrongState(booking, 'confirmed as returned');
   await deps.db.$transaction(async (tx) => {
     await transition(tx, now, booking, {
-      from: ['ACTIVE', 'ADMIN_REVIEW'],
+      from: ['ACTIVE'],
       to: 'RETURNED',
       data: returnedData(booking, now),
       actor: adminActor(adminId),
@@ -1259,43 +1408,6 @@ export async function adminVerifyReturn(deps, booking, adminId, reason) {
   await notifyBooking(deps, updated, 'owner', 'returnedOwner');
   await notifyBooking(deps, updated, 'renter', 'returnedRenter');
   return updated;
-}
-
-/** Decides a contested settlement: the damage and late fee to take from the deposit. */
-export async function adminDecide(deps, booking, adminId, { damagePaise, lateFeePaise, reason }) {
-  const now = deps.clock.now();
-  if (booking.status !== 'ADMIN_REVIEW') throw wrongState(booking, 'decided');
-  const refund = await deps.db.$transaction(async (tx) => {
-    const created = await settle(tx, now, booking, {
-      from: ['ADMIN_REVIEW'],
-      lateFeePaise,
-      damagePaise,
-      actor: adminActor(adminId),
-      action: 'ADMIN_DECIDED',
-      reason,
-    });
-    if (booking.claim) {
-      await tx.rentalClaim.update({
-        where: { bookingId: booking.id },
-        data: {
-          status: 'DECIDED',
-          decidedById: adminId,
-          decidedPaise: damagePaise,
-          decisionReason: reason,
-          decidedAt: now,
-        },
-      });
-    }
-    await adminAudit(tx, now, {
-      adminId,
-      action: 'DECIDE_DEPOSIT',
-      bookingId: booking.id,
-      reason,
-      details: { damagePaise, lateFeePaise },
-    });
-    return created;
-  });
-  return afterSettlement(deps, booking.id, refund);
 }
 
 // ---------------------------------------------------------------------------

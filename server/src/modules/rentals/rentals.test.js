@@ -2,7 +2,11 @@
 // cases, closed days, disputes and admin fallbacks.
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { HANDOVER_MAX_ATTEMPTS, RENTAL_NON_RETURN_REPORT_DAYS } from '../../config/policy.js';
+import {
+  APPEAL_WINDOW_DAYS,
+  HANDOVER_MAX_ATTEMPTS,
+  RENTAL_NON_RETURN_REPORT_DAYS,
+} from '../../config/policy.js';
 import { addDays, addHours } from '../../lib/clock.js';
 import {
   createTestContext,
@@ -29,6 +33,7 @@ import {
 } from '../../../test/rentals.js';
 import { insertListing } from '../../../test/listings.js';
 import { retryRefunds } from '../payments/refunds.service.js';
+import { adminDispute, runDisputeJobs } from '../../../test/disputes.js';
 
 beforeEach(resetDb);
 afterAll(() => db.$disconnect());
@@ -291,12 +296,20 @@ describe('handover and return', () => {
     const reported = await ownerAction(ctx, owner, booking.id, 'report-non-return');
     expect(reported.body.booking.status).toBe('ADMIN_REVIEW');
 
+    // The report is a dispute; an admin decides it came back (Step 8).
     const admin = await registerAdmin(ctx);
-    const back = await adminRentalAction(ctx, admin, booking.id, 'verify-return', {
+    const dispute = await db.dispute.findFirstOrThrow({ where: { bookingId: booking.id } });
+    expect(dispute.kind).toBe('NOT_RETURNED');
+    await adminDispute(ctx, admin, dispute.id, 'decide', {
+      outcome: 'RETURNED',
       reason: 'Returned at our office',
     });
-    expect(back.body.booking.status).toBe('RETURNED');
-    expect(back.body.booking.lateFeePaise).toBe(2 * 20000);
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    const back = await db.rentalBooking.findUnique({ where: { id: booking.id } });
+    expect(back.status).toBe('RETURNED');
+    // Returned when the decision took effect: 6 days after the due time, 5 started days late.
+    expect(back.lateFeePaise).toBe(5 * 20000);
   });
 
   it('sends the day-before, due-day and overdue reminders once each', async () => {
@@ -330,12 +343,18 @@ describe('settling the deposit', () => {
     expect(await db.refund.count({ where: { bookingId: booking.id } })).toBe(0);
 
     const admin = await registerAdmin(ctx);
-    const decided = await adminRentalAction(ctx, admin, booking.id, 'decide', {
+    const dispute = await db.dispute.findFirstOrThrow({ where: { bookingId: booking.id } });
+    await adminDispute(ctx, admin, dispute.id, 'decide', {
+      outcome: 'SETTLE',
       damagePaise: 0,
       lateFeePaise: 0,
       reason: 'Messages show the owner postponed the return',
     });
-    expect(decided.body.booking.status).toBe('COMPLETED');
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    expect((await db.rentalBooking.findUnique({ where: { id: booking.id } })).status).toBe(
+      'COMPLETED',
+    );
     expect((await db.refund.findFirst({ where: { bookingId: booking.id } })).amountPaise).toBe(
       500000,
     );

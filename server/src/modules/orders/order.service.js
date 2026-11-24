@@ -12,6 +12,13 @@ import { AppError } from '../../lib/errors.js';
 import { paged, pageWindow } from '../../lib/pagination.js';
 import { discardStored, readImages, storeImages } from '../listings/listings.service.js';
 import { createRefund, processRefund } from '../payments/refunds.service.js';
+import {
+  evidencePhotos,
+  announceOpened,
+  openDispute,
+  UNFINISHED,
+  unfinishedDispute,
+} from '../disputes/dispute.records.js';
 import { notify } from './order.emails.js';
 
 // Seller orders as an explicit state machine (see the plan in docs). Every change
@@ -31,12 +38,43 @@ const BEFORE_DISPATCH = ['AWAITING_DISPATCH', 'AWAITING_PICKUP'];
 
 const orderInclude = {
   items: true,
-  issue: true,
+  disputes: {
+    include: { evidence: { orderBy: { createdAt: 'asc' } } },
+    orderBy: { createdAt: 'asc' },
+  },
   buyer: { select: { id: true, phone: true, profile: { select: { displayName: true } } } },
   seller: { select: { id: true, phone: true, profile: { select: { displayName: true } } } },
 };
 
 const iso = (date) => (date ? date.toISOString() : null);
+
+/** The order's sale-issue dispute, if the buyer ever reported one (one per order). */
+const saleIssue = (order) => order.disputes?.findLast((d) => d.kind === 'SALE_ISSUE') ?? null;
+const hasUnfinishedDispute = (order) =>
+  (order.disputes ?? []).some((d) => UNFINISHED.includes(d.status));
+
+/** The issue as the order pages have shown it since Step 5, now read from the dispute. */
+function issueView(dispute, order) {
+  if (!dispute || dispute.status === 'WITHDRAWN') return null;
+  const finished = !UNFINISHED.includes(dispute.status);
+  const decision = dispute.finalDecision ?? dispute.decision;
+  const resolution =
+    dispute.status === 'RESOLVED' ? 'FULL_REFUND' : finished ? (decision?.outcome ?? null) : null;
+  return {
+    disputeId: dispute.id,
+    kind: dispute.category,
+    description: dispute.description,
+    photos: (dispute.evidence?.[0]?.photos ?? []).map((photo) => photo.url),
+    status: finished ? 'RESOLVED' : 'OPEN',
+    resolution,
+    refundPaise:
+      resolution === 'PARTIAL_REFUND'
+        ? (decision?.refundPaise ?? null)
+        : resolution === 'FULL_REFUND'
+          ? order.refundedPaise
+          : null,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // What each side may do, and see
@@ -46,7 +84,7 @@ function buyerActions(order, now) {
   const actions = [];
   if (BEFORE_DISPATCH.includes(order.status)) actions.push('cancel');
   if (order.status === 'DELIVERY_REPORTED') actions.push('confirm', 'not-received');
-  if (order.status === 'DELIVERED' && !order.issue && order.issueWindowEndsAt > now)
+  if (order.status === 'DELIVERED' && !saleIssue(order) && order.issueWindowEndsAt > now)
     actions.push('issue');
   if (order.status === 'AWAITING_DISPATCH' && order.extensionStatus === 'REQUESTED')
     actions.push('extension');
@@ -86,16 +124,13 @@ function commonView(order) {
     issueWindowEndsAt: iso(order.issueWindowEndsAt),
     completedAt: iso(order.completedAt),
     cancelledAt: iso(order.cancelledAt),
-    issue: order.issue
-      ? {
-          kind: order.issue.kind,
-          description: order.issue.description,
-          photos: order.issue.photos,
-          status: order.issue.status,
-          resolution: order.issue.resolution,
-          refundPaise: order.issue.refundPaise,
-        }
-      : null,
+    issue: issueView(saleIssue(order), order),
+    disputes: (order.disputes ?? []).map((d) => ({
+      id: d.id,
+      ref: d.ref,
+      kind: d.kind,
+      status: d.status,
+    })),
     createdAt: iso(order.createdAt),
   };
 }
@@ -141,8 +176,8 @@ export function toSellerOrder(order) {
     })),
     commissionPaise: order.commissionPaise,
     sellerPayablePaise: order.sellerPayablePaise,
-    // Payout-eligible only once complete: delivered, issue window over, nothing open (I10).
-    payoutEligible: order.status === 'COMPLETED',
+    // Payout-eligible only once complete with no unfinished dispute (I10, I85).
+    payoutEligible: order.status === 'COMPLETED' && !hasUnfinishedDispute(order),
     handoverAttemptsLeft:
       order.status === 'AWAITING_PICKUP'
         ? Math.max(0, HANDOVER_MAX_ATTEMPTS - order.handoverAttempts)
@@ -483,18 +518,28 @@ export async function confirmReceipt(deps, order) {
   return updated;
 }
 
+/** The buyer says it never arrived: the order goes to review and a dispute opens (I79). */
 export async function reportNotReceived(deps, order, reason) {
   const now = deps.clock.now();
-  await deps.db.$transaction((tx) =>
-    transition(tx, now, order, {
+  await deps.db.$transaction(async (tx) => {
+    await transition(tx, now, order, {
       from: ['DELIVERY_REPORTED'],
       to: 'ADMIN_REVIEW',
       actor: { userId: order.buyerId, role: 'BUYER' },
       action: 'NOT_RECEIVED',
       reason,
       verb: 'reported',
-    }),
-  );
+    });
+    await openDispute(tx, now, {
+      kind: 'NOT_DELIVERED',
+      orderId: order.id,
+      claimantId: order.buyerId,
+      respondentId: order.sellerId,
+      description: reason || 'The buyer says the order did not arrive.',
+      evidence: { authorId: order.buyerId, text: reason || null },
+    });
+  });
+  await announceOpened(deps, { orderId: order.id, kind: 'NOT_DELIVERED' });
   const updated = await loadOrder(deps.db, order.id);
   await notify(deps, updated, 'seller', 'sentToReview');
   return updated;
@@ -504,7 +549,14 @@ export async function reportNotReceived(deps, order, reason) {
 export async function reportIssue(deps, order, { kind, description }, files) {
   const { db, clock } = deps;
   const now = clock.now();
-  if (order.status !== 'DELIVERED' || order.issue) throw wrongState(order, 'reported');
+  if (order.status !== 'DELIVERED') throw wrongState(order, 'reported');
+  if (saleIssue(order)) {
+    throw new AppError(
+      409,
+      'ISSUE_ALREADY_REPORTED',
+      'A problem was already reported for this order',
+    );
+  }
   if (order.issueWindowEndsAt <= now) {
     throw new AppError(
       409,
@@ -521,7 +573,7 @@ export async function reportIssue(deps, order, { kind, description }, files) {
     );
   }
 
-  const stored = await storeImages(deps, images, 'issues');
+  const stored = await storeImages(deps, images, 'disputes');
   try {
     await db.$transaction(async (tx) => {
       await transition(tx, now, order, {
@@ -532,13 +584,17 @@ export async function reportIssue(deps, order, { kind, description }, files) {
         reason: description,
         verb: 'reported',
       });
-      await tx.orderIssue.create({
-        data: {
-          orderId: order.id,
-          kind,
-          description,
-          photos: stored.map((photo) => photo.url),
-          createdAt: now,
+      await openDispute(tx, now, {
+        kind: 'SALE_ISSUE',
+        orderId: order.id,
+        claimantId: order.buyerId,
+        respondentId: order.sellerId,
+        category: kind,
+        description,
+        evidence: {
+          authorId: order.buyerId,
+          text: description,
+          photos: evidencePhotos(stored, now),
         },
       });
     });
@@ -546,41 +602,123 @@ export async function reportIssue(deps, order, { kind, description }, files) {
     await discardStored(deps, stored);
     throw error;
   }
+  await announceOpened(deps, { orderId: order.id, kind: 'SALE_ISSUE' });
   const updated = await loadOrder(db, order.id);
   await notify(deps, updated, 'seller', 'issueOpenedSeller');
   return updated;
 }
 
 // ---------------------------------------------------------------------------
-// Admin steps: each needs a reason and is written to the admin audit log
+// Effects of dispute outcomes (called by the dispute module, which audits them)
 // ---------------------------------------------------------------------------
 
-export async function adminVerifyDelivery(deps, order, adminId, reason) {
+/** Delivery is confirmed by an admin decision or the buyer's own word. */
+export async function confirmDelivery(deps, order, actor, reason, from = ['ADMIN_REVIEW']) {
   const now = deps.clock.now();
-  await deps.db.$transaction(async (tx) => {
-    await transition(tx, now, order, {
-      from: ['DELIVERY_REPORTED', 'ADMIN_REVIEW'],
+  await deps.db.$transaction((tx) =>
+    transition(tx, now, order, {
+      from,
       to: 'DELIVERED',
       data: deliveredData(now),
-      actor: { userId: adminId, role: 'ADMIN' },
+      actor,
       action: 'DELIVERY_VERIFIED',
       reason,
-      verb: 'verified as delivered',
-    });
-    await adminAudit(tx, now, { adminId, action: 'VERIFY_DELIVERY', orderId: order.id, reason });
-  });
+      verb: 'confirmed as delivered',
+    }),
+  );
   const updated = await loadOrder(deps.db, order.id);
   await notify(deps, updated, 'seller', 'deliveredSeller');
   return updated;
 }
 
-/** Cancels an order that cannot go ahead, with a full refund. Not after delivery. */
+/** Lost in transit: cancelled with a full refund; the item is not back on sale (SPEC 14). */
+export async function cancelUndelivered(deps, order, actor, reason) {
+  const now = deps.clock.now();
+  const refund = await deps.db.$transaction(async (tx) => {
+    await transition(tx, now, order, {
+      from: ['ADMIN_REVIEW'],
+      to: 'CANCELLED',
+      data: { cancelledAt: now },
+      actor,
+      action: 'CANCELLED',
+      reason,
+      verb: 'cancelled',
+    });
+    return refundRest(tx, now, order, 'NOT_DELIVERED', `order:${order.id}:cancel`);
+  });
+  const updated = await finish(deps, order.id, refund);
+  await notify(deps, updated, 'buyer', 'cancelled');
+  await notify(deps, updated, 'seller', 'cancelled');
+  return updated;
+}
+
+/** Settles a sale issue: full refund, partial refund (items only) or none (I52). */
+export async function resolveIssue(deps, order, { resolution, refundPaise }, actor, reason) {
+  const now = deps.clock.now();
+  const windowOver = order.issueWindowEndsAt <= now;
+  const next = resolution === 'FULL_REFUND' ? 'REFUNDED' : windowOver ? 'COMPLETED' : 'DELIVERED';
+  const refund = await deps.db.$transaction(async (tx) => {
+    await transition(tx, now, order, {
+      from: ['ISSUE_OPEN'],
+      to: next,
+      data: next === 'COMPLETED' ? { completedAt: now } : {},
+      actor,
+      action: `ISSUE_${resolution}`,
+      reason,
+      verb: 'resolved',
+    });
+    if (resolution === 'FULL_REFUND')
+      return refundRest(tx, now, order, 'ISSUE_FULL', `order:${order.id}:issue`);
+    if (resolution === 'PARTIAL_REFUND') {
+      return createRefund(tx, now, {
+        key: `order:${order.id}:issue`,
+        checkoutId: order.checkoutId,
+        orderId: order.id,
+        paymentId: await capturedPaymentId(tx, order.checkoutId),
+        amountPaise: refundPaise,
+        itemsAmountPaise: refundPaise,
+        reason: 'ISSUE_PARTIAL',
+      });
+    }
+    return null;
+  });
+  return finish(deps, order.id, refund);
+}
+
+/** The largest partial refund allowed for an order's issue (less than what is left). */
+export const partialRefundLimit = (order) =>
+  order.itemsSubtotalPaise - order.itemsRefundedPaise - 1;
+
+// ---------------------------------------------------------------------------
+// Admin steps: each needs a reason and is written to the admin audit log
+// ---------------------------------------------------------------------------
+
+/** The seller said delivered and the buyer has not answered yet: an admin confirms it. */
+export async function adminVerifyDelivery(deps, order, adminId, reason) {
+  const now = deps.clock.now();
+  const updated = await confirmDelivery(deps, order, { userId: adminId, role: 'ADMIN' }, reason, [
+    'DELIVERY_REPORTED',
+  ]);
+  await deps.db.$transaction((tx) =>
+    adminAudit(tx, now, { adminId, action: 'VERIFY_DELIVERY', orderId: order.id, reason }),
+  );
+  return updated;
+}
+
+/** Cancels an order that cannot go ahead, with a full refund. Disputes are decided instead. */
 export async function adminCancel(deps, order, adminId, reason) {
   const now = deps.clock.now();
+  if (await unfinishedDispute(deps.db, { orderId: order.id })) {
+    throw new AppError(
+      409,
+      'DISPUTE_OPEN',
+      'This order has an open dispute; decide the dispute instead',
+    );
+  }
   const beforeDispatch = BEFORE_DISPATCH.includes(order.status);
   const refund = await deps.db.$transaction(async (tx) => {
     await transition(tx, now, order, {
-      from: [...BEFORE_DISPATCH, 'DISPATCHED', 'DELIVERY_REPORTED', 'ADMIN_REVIEW'],
+      from: [...BEFORE_DISPATCH, 'DISPATCHED', 'DELIVERY_REPORTED'],
       to: 'CANCELLED',
       data: { cancelledAt: now },
       actor: { userId: adminId, role: 'ADMIN' },
@@ -605,71 +743,21 @@ export async function adminCancel(deps, order, adminId, reason) {
   return updated;
 }
 
-/** Settles a reported issue: full refund, partial refund (items only) or rejection. */
-export async function adminResolveIssue(deps, order, adminId, { resolution, refundPaise, reason }) {
+/** A withdrawn sale issue: the order is received again (or complete, if the window has passed). */
+export async function restoreAfterIssue(deps, order, actor) {
   const now = deps.clock.now();
-  if (order.status !== 'ISSUE_OPEN') throw wrongState(order, 'resolved');
-  const itemsLeft = order.itemsSubtotalPaise - order.itemsRefundedPaise;
-  if (resolution === 'PARTIAL_REFUND' && !(refundPaise > 0 && refundPaise < itemsLeft)) {
-    throw AppError.badRequest(
-      'A partial refund must be more than ₹0 and less than the items left to refund',
-      {
-        maxPaise: itemsLeft - 1,
-      },
-    );
-  }
   const windowOver = order.issueWindowEndsAt <= now;
-  const next = resolution === 'FULL_REFUND' ? 'REFUNDED' : windowOver ? 'COMPLETED' : 'DELIVERED';
-
-  const refund = await deps.db.$transaction(async (tx) => {
-    await transition(tx, now, order, {
+  await deps.db.$transaction((tx) =>
+    transition(tx, now, order, {
       from: ['ISSUE_OPEN'],
-      to: next,
-      data: next === 'COMPLETED' ? { completedAt: now } : {},
-      actor: { userId: adminId, role: 'ADMIN' },
-      action: `ISSUE_${resolution}`,
-      reason,
-      verb: 'resolved',
-    });
-    await tx.orderIssue.update({
-      where: { orderId: order.id },
-      data: {
-        status: 'RESOLVED',
-        resolution,
-        refundPaise:
-          resolution === 'FULL_REFUND'
-            ? order.totalPaise - order.refundedPaise
-            : resolution === 'PARTIAL_REFUND'
-              ? refundPaise
-              : null,
-        resolvedById: adminId,
-        resolutionReason: reason,
-        resolvedAt: now,
-      },
-    });
-    await adminAudit(tx, now, {
-      adminId,
-      action: 'RESOLVE_ISSUE',
-      orderId: order.id,
-      reason,
-      details: { resolution, refundPaise },
-    });
-    if (resolution === 'FULL_REFUND')
-      return refundRest(tx, now, order, 'ISSUE_FULL', `order:${order.id}:issue`);
-    if (resolution === 'PARTIAL_REFUND') {
-      return createRefund(tx, now, {
-        key: `order:${order.id}:issue`,
-        checkoutId: order.checkoutId,
-        orderId: order.id,
-        paymentId: await capturedPaymentId(tx, order.checkoutId),
-        amountPaise: refundPaise,
-        itemsAmountPaise: refundPaise,
-        reason: 'ISSUE_PARTIAL',
-      });
-    }
-    return null;
-  });
-  return finish(deps, order.id, refund);
+      to: windowOver ? 'COMPLETED' : 'DELIVERED',
+      data: windowOver ? { completedAt: now } : {},
+      actor,
+      action: 'ISSUE_WITHDRAWN',
+      verb: 'restored',
+    }),
+  );
+  return loadOrder(deps.db, order.id);
 }
 
 export async function adminResetHandover(deps, order, adminId, reason) {

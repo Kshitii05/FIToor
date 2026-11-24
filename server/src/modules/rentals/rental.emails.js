@@ -14,6 +14,9 @@ const when = new Intl.DateTimeFormat('en-IN', {
 const at = (date) => `${when.format(date)} (India time)`;
 const dates = (b) => `${fromDateColumn(b.startDate)} to ${fromDateColumn(b.endDate)}`;
 const name = (b) => `${b.ref} (${b.title})`;
+/** The owner's damage claim on a booking, from its deposit dispute. */
+const claimOf = (b) =>
+  (b.disputes ?? []).findLast((d) => d.kind === 'RENTAL_DEPOSIT' && d.claimedDamagePaise !== null);
 
 const messages = {
   requestedOwner: (b) => ({
@@ -82,14 +85,7 @@ const messages = {
   }),
   claimFiledRenter: (b) => ({
     subject: `${APP_NAME}: damage reported on ${b.ref}`,
-    text: `The owner reported damage on ${b.title} and claims ${formatPaise(b.claim.totalPaise)} from the deposit. Accept or dispute it by ${at(b.claim.respondDueAt)}; if you do not answer, our team decides.`,
-  }),
-  claimAnsweredOwner: (b) => ({
-    subject: `${APP_NAME}: the renter answered your claim on ${b.ref}`,
-    text:
-      b.claim.status === 'ACCEPTED'
-        ? `The renter accepted your claim on ${b.ref}. The deposit is being settled.`
-        : `The renter disputes your claim on ${b.ref}. Our team will review the photos and decide.`,
+    text: `The owner reported damage on ${b.title} and claims ${formatPaise(claimOf(b)?.claimedDamagePaise ?? 0)} from the deposit. Accept or answer it by ${at(claimOf(b)?.respondDueAt ?? new Date(0))}; if you do not answer, our team decides.`,
   }),
   lateFeeDisputedOwner: (b) => ({
     subject: `${APP_NAME}: the renter disputes the late fee on ${b.ref}`,

@@ -5,7 +5,6 @@ import {
 import { addHours } from '../../lib/clock.js';
 import { notifyBooking } from './rental.emails.js';
 import {
-  claimUnanswered,
   dueToExpire,
   expireBooking,
   loadBooking,
@@ -93,12 +92,6 @@ export async function runRentalJobs(deps) {
       { status: 'RETURNED', inspectionEndsAt: { lte: now } },
       deps,
       settleAfterInspectionWindow,
-    ),
-    // Claims the renter did not answer within 48 hours go to an admin.
-    claimsToReview: await eachDue(
-      { status: 'CLAIM_OPEN', claim: { status: 'OPEN', respondDueAt: { lte: now } } },
-      deps,
-      claimUnanswered,
     ),
   };
 }

@@ -1,6 +1,7 @@
 // The eight checks the build playbook asks for in Step 6, written before the code.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  APPEAL_WINDOW_DAYS,
   CLAIM_RESPONSE_HOURS,
   DEPOSIT_AUTO_REFUND_AFTER_RETURN_HOURS,
   RENTAL_PENDING_HOLD_HOURS,
@@ -9,7 +10,6 @@ import { addHours, addMinutes } from '../../lib/clock.js';
 import { createTestContext, db, registerVerifiedUser, resetDb } from '../../../test/helpers.js';
 import { registerAdmin } from '../../../test/orders.js';
 import {
-  adminRentalAction,
   bookingLedger,
   bookingUpTo,
   END,
@@ -26,6 +26,7 @@ import {
   withPhotos,
 } from '../../../test/rentals.js';
 import { lateFeeFor } from './rental.rules.js';
+import { adminDispute, runDisputeJobs } from '../../../test/disputes.js';
 
 beforeEach(resetDb);
 afterAll(() => db.$disconnect());
@@ -334,26 +335,31 @@ describe('6. damage claims', () => {
       'CLAIM_OPEN',
     );
 
+    // No answer in 48 hours: the dispute goes to an admin (Step 8).
     ctx.clock.set(addHours(returnedAt, 47 + CLAIM_RESPONSE_HOURS));
-    await runJobs(ctx);
-    const review = await db.rentalBooking.findUnique({
-      where: { id: booking.id },
-      include: { claim: true },
-    });
-    expect(review.status).toBe('ADMIN_REVIEW');
-    expect(review.claim.status).toBe('NO_RESPONSE');
+    await runDisputeJobs(ctx);
+    const dispute = await db.dispute.findFirstOrThrow({ where: { bookingId: booking.id } });
+    expect(dispute).toMatchObject({ status: 'UNDER_REVIEW', respondedAt: null });
+    expect((await db.rentalBooking.findUnique({ where: { id: booking.id } })).status).toBe(
+      'ADMIN_REVIEW',
+    );
 
     const admin = await registerAdmin(ctx);
-    const decided = await adminRentalAction(ctx, admin, booking.id, 'decide', {
+    const decided = await adminDispute(ctx, admin, dispute.id, 'decide', {
+      outcome: 'SETTLE',
       damagePaise: 100000,
       lateFeePaise: 0,
       reason: 'Photos show the tear; the stain was there before the rental',
     });
     expect(decided.status).toBe(200);
-    expect(decided.body.booking.status).toBe('COMPLETED');
+    expect(await db.adminAuditLog.count({ where: { targetId: dispute.id } })).toBe(1);
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    expect((await db.rentalBooking.findUnique({ where: { id: booking.id } })).status).toBe(
+      'COMPLETED',
+    );
     const [refund] = await db.refund.findMany({ where: { bookingId: booking.id } });
     expect(refund).toMatchObject({ amountPaise: 400000, depositAmountPaise: 400000 });
-    expect(await db.adminAuditLog.count({ where: { targetId: booking.id } })).toBe(1);
   });
 
   it('the renter can accept a claim, which settles it, or dispute it, which goes to an admin', async () => {

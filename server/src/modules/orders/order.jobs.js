@@ -4,6 +4,7 @@ import { expireCheckouts } from '../checkout/checkout.service.js';
 import { retryRefunds } from '../payments/refunds.service.js';
 import { notify } from './order.emails.js';
 import { loadOrder } from './order.service.js';
+import { announceOpened, openDispute } from '../disputes/dispute.records.js';
 
 // Order deadlines, run on a schedule. Each step changes an order only if it is still
 // in the state the deadline belongs to and the deadline has passed, so running it
@@ -72,6 +73,21 @@ function sendUnconfirmedToReview(deps, now) {
         data: { status: 'ADMIN_REVIEW' },
       });
       if (count === 1) {
+        // A dispute opens for the buyer, who did not answer; the seller can respond (I79).
+        const order = await tx.order.findUniqueOrThrow({ where: { id } });
+        await openDispute(tx, now, {
+          kind: 'NOT_DELIVERED',
+          orderId: id,
+          claimantId: order.buyerId,
+          respondentId: order.sellerId,
+          openedByClaimant: false,
+          description:
+            'The seller marked this delivered and the buyer did not confirm within 48 hours.',
+          evidence: {
+            authorId: null,
+            text: 'Opened automatically after the 48-hour receipt window.',
+          },
+        });
         await tx.orderEvent.create({
           data: {
             orderId: id,
@@ -86,6 +102,7 @@ function sendUnconfirmedToReview(deps, now) {
       return count === 1;
     });
     if (moved) {
+      await announceOpened(deps, { orderId: id, kind: 'NOT_DELIVERED' });
       const order = await loadOrder(deps.db, id);
       await notify(deps, order, 'buyer', 'sentToReview');
       await notify(deps, order, 'seller', 'sentToReview');

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { DISPATCH_WARNING_HOURS } from '../../config/policy.js';
+import { APPEAL_WINDOW_DAYS, DISPATCH_WARNING_HOURS } from '../../config/policy.js';
 import { addBusinessDays, addHours } from '../../lib/clock.js';
 import { createTestContext, db, registerVerifiedUser, resetDb } from '../../../test/helpers.js';
 import {
@@ -16,6 +16,7 @@ import {
   signInAgain,
 } from '../../../test/orders.js';
 import { PNG } from '../../../test/listings.js';
+import { adminDispute, runDisputeJobs } from '../../../test/disputes.js';
 import { runOrderJobs } from './order.jobs.js';
 
 const API = '/api/v1';
@@ -166,6 +167,16 @@ describe('seller steps', () => {
 });
 
 describe('admin decisions', () => {
+  // Admin decisions now go through the dispute and take effect after the appeal
+  // window (I81); these check the money once they have.
+  async function decideAndWait(ctx, admin, orderId, body) {
+    const dispute = await db.dispute.findFirstOrThrow({ where: { orderId } });
+    const res = await adminDispute(ctx, await signInAgain(ctx, admin), dispute.id, 'decide', body);
+    ctx.clock.advance({ days: APPEAL_WINDOW_DAYS });
+    await runDisputeJobs(ctx);
+    return res;
+  }
+
   it('a parcel lost in transit is refunded and not put back on sale', async () => {
     const ctx = createTestContext();
     const { seller, buyer, order, listing } = await paidOrder(ctx);
@@ -173,11 +184,17 @@ describe('admin decisions', () => {
     await sellerAction(ctx, seller, order.id, 'deliver');
     await buyerAction(ctx, buyer, order.id, 'not-received', { reason: 'Nothing came' });
 
-    const res = await adminAction(ctx, admin, order.id, 'cancel', {
+    // An open dispute is decided, not cancelled around.
+    const blocked = await adminAction(ctx, admin, order.id, 'cancel', {
+      reason: 'Courier lost it',
+    });
+    expect(blocked.body.error.code).toBe('DISPUTE_OPEN');
+    await decideAndWait(ctx, admin, order.id, {
+      outcome: 'REFUND',
       reason: 'Courier lost the parcel',
     });
 
-    expect(res.body.order.status).toBe('CANCELLED');
+    expect((await db.order.findUnique({ where: { id: order.id } })).status).toBe('CANCELLED');
     expect((await db.refund.findFirstOrThrow()).reason).toBe('NOT_DELIVERED');
     expect((await db.listing.findUnique({ where: { id: listing.id } })).quantity).toBe(0);
     expect(await ledgerTotals({ orderId: order.id })).toMatchObject({
@@ -206,19 +223,23 @@ describe('admin decisions', () => {
     };
 
     const full = await report();
-    const refunded = await adminAction(ctx, admin, full.order.id, 'resolve-issue', {
-      resolution: 'FULL_REFUND',
+    const rejected = await report();
+    await decideAndWait(ctx, admin, full.order.id, {
+      outcome: 'FULL_REFUND',
       reason: 'Wrong item sent, confirmed from photos',
     });
-    expect(refunded.body.order.status).toBe('REFUNDED');
-    expect(refunded.body.order.refundedPaise).toBe(128000);
+    const refunded = await db.order.findUnique({ where: { id: full.order.id } });
+    expect(refunded.status).toBe('REFUNDED');
+    expect(refunded.refundedPaise).toBe(128000);
 
-    const rejected = await report();
-    const res = await adminAction(ctx, admin, rejected.order.id, 'resolve-issue', {
-      resolution: 'REJECTED',
+    await decideAndWait(ctx, admin, rejected.order.id, {
+      outcome: 'REJECTED',
       reason: 'Photos show the item as described',
     });
-    expect(res.body.order.status).toBe('DELIVERED');
+    // Rejected within the 7-day window: the order is back to received.
+    expect((await db.order.findUnique({ where: { id: rejected.order.id } })).status).toBe(
+      'DELIVERED',
+    );
     expect(await db.refund.count({ where: { orderId: rejected.order.id } })).toBe(0);
     expect(await db.adminAuditLog.count()).toBe(2);
   });
@@ -234,9 +255,10 @@ describe('admin decisions', () => {
       .set(buyer.bearer)
       .field('data', JSON.stringify({ kind: 'DAMAGED', description: 'Torn along the hem.' }))
       .attach('photos', PNG, 'photo.png');
+    const dispute = await db.dispute.findFirstOrThrow({ where: { orderId: order.id } });
     const resolve = (refundPaise) =>
-      adminAction(ctx, admin, order.id, 'resolve-issue', {
-        resolution: 'PARTIAL_REFUND',
+      adminDispute(ctx, admin, dispute.id, 'decide', {
+        outcome: 'PARTIAL_REFUND',
         refundPaise,
         reason: 'Partial refund agreed',
       });

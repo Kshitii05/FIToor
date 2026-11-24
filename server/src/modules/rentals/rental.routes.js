@@ -16,14 +16,13 @@ import { requireAdmin, requireVerified } from '../../lib/auth.js';
 import { AppError } from '../../lib/errors.js';
 import { paginationQuery } from '../../lib/pagination.js';
 import { uploadImages } from '../../lib/upload.js';
+import { addDisputeEvidence, agreeToDispute } from '../disputes/disputes.service.js';
 import { confirmPayment } from '../payments/payments.service.js';
 import {
   addBlockedDates,
   adminCancel,
-  adminDecide,
   adminVerifyHandover,
   adminVerifyReturn,
-  answerClaim,
   approveBooking,
   availability,
   cancelByOwner,
@@ -118,11 +117,6 @@ const claimResponseSchema = z
     message: 'Say why you dispute the claim',
     path: ['reason'],
   });
-const decideSchema = z.strictObject({
-  damagePaise: amount,
-  lateFeePaise: amount,
-  reason: reasonText,
-});
 const blockSchema = z.strictObject({
   listingId: z.uuid(),
   startDate: dateSchema,
@@ -234,7 +228,18 @@ export function createRenterBookingsRouter(deps) {
   });
   router.post('/:id/claim-response', async (req, res) => {
     const input = claimResponseSchema.parse(req.body ?? {});
-    reply(res, await answerClaim(deps, await mine(req), input));
+    // Kept for the rental pages: accepting agrees to the claim; disputing it adds the
+    // renter's answer to the dispute, which then goes to an admin (I79).
+    const booking = await mine(req);
+    const dispute = await db.dispute.findFirst({
+      where: { bookingId: booking.id, kind: 'RENTAL_DEPOSIT', status: 'OPEN' },
+    });
+    if (!dispute || dispute.claimantId !== booking.ownerId) {
+      throw new AppError(409, 'NO_OPEN_CLAIM', 'There is no claim to answer');
+    }
+    if (input.accept) await agreeToDispute(deps, req.auth.userId, dispute);
+    else await addDisputeEvidence(deps, req.auth.userId, dispute, { text: input.reason }, []);
+    reply(res, await loadBooking(db, booking.id));
   });
   router.post('/:id/dispute-late-fee', async (req, res) => {
     const { reason } = requiredReason.parse(req.body ?? {});
@@ -336,10 +341,6 @@ export function createAdminRentalsRouter(deps) {
   router.post('/:id/verify-return', async (req, res) => {
     const { reason } = requiredReason.parse(req.body ?? {});
     reply(res, await adminVerifyReturn(deps, await load(req), req.auth.userId, reason));
-  });
-  router.post('/:id/decide', async (req, res) => {
-    const input = decideSchema.parse(req.body ?? {});
-    reply(res, await adminDecide(deps, await load(req), req.auth.userId, input));
   });
   router.post('/:id/cancel', async (req, res) => {
     const { reason } = requiredReason.parse(req.body ?? {});
